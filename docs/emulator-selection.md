@@ -71,8 +71,8 @@ MCU portability of the core is not a criterion. See PROJECT_BRIEF.md.
 
 | Check | V41 | Nonpareil | Emu41gg |
 | --- | --- | --- | --- |
-| Source obtained, version, licence text read | | | |
-| Core separable from UI | | | |
+| Source obtained, version, licence text read | R9O source, GPL v2 or later (file headers) | | |
+| Core separable from UI | Likely, by source scan (see below). Not yet proven by a build | | |
 | Builds on arm64 | | | |
 | Boots HP-41CX ROM | | | |
 | Loads a plug-in ROM | | | |
@@ -83,3 +83,39 @@ MCU portability of the core is not a criterion. See PROJECT_BRIEF.md.
 
 Emulators in this family expect user-supplied ROM images. None are
 committed here.
+
+## V41 R9O source inspection (14 Nov 2026)
+
+Source inspection only. Nothing has been compiled.
+
+- Obtained `V41R9O-Source.zip` from hp.giesselink.com/V41/.
+  SHA-256 `36cf4d72a7a45102497528c70e1191b1423d571945839cff5e8abd840abb8f2a`.
+- Licence. Source file headers state GPL version 2 or any later version,
+  copyright Warren Furlow.
+- Build system is Visual Studio. `StdAfx.h` pulls in MFC (`afxwin.h` and
+  related), Winsock2 and `mmsystem.h`. The UI is MFC.
+- Core files and a rough count of lines that reference MFC or Win32 types:
+
+  | File | Lines | Win/MFC references |
+  | --- | ---: | ---: |
+  | HP41Kernel.cpp (Nut CPU) | 2486 | 11 |
+  | HP41Hpil.cpp | 478 | 2 |
+  | HP41Timer.cpp | 543 | 4 |
+  | HP41Display.cpp | 513 | 1 |
+  | HP41Trace.cpp | 2628 | 11 |
+  | HP41File.cpp (MOD loading, state) | 2782 | 55 |
+  | HP41Keyboard.cpp | 1425 | 61 |
+  | Tcpip.cpp | 553 | 40 |
+
+  The CPU, HP-IL, timer and display logic are thinly coupled. File handling,
+  keyboard and TCP/IP need a shim or rewrite, as with emu71-mac.
+- HP-IL is behind a two-method abstract interface (`HpilIf` with
+  `SendFrame` and `RecvFrame` taking a 16-bit frame). That is the natural
+  attachment point for a virtual peripheral and for frame capture.
+- The source package ships MOD images including `NUT-C`, `NUT-CV`, `NUT-CX`,
+  `HPIL`, `HPIL-DEV`, `EXT-FUNS`, `EXT-IO`, `EXT-IL`, `TIME`, `PLOTTER` and
+  `PRINTER`. These are HP firmware. They are used locally from the upstream
+  download and are not committed to this repository.
+- Still to verify: that the HP-IL module is emulated at register level with
+  `HPIL.MOD` executing, the instruction trace facility in `HP41Trace.cpp`,
+  and an actual arm64 build.
