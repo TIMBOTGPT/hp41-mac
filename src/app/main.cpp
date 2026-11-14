@@ -195,10 +195,11 @@ static void draw_text5(float x, float y, float px, const char *s, SDL_Color c)
     }
   }
 
+static bool lcd_test = false;   // F10 or --lcdtest: light every segment, punctuation mark and annunciator
 static void draw_lcd()
   {
   fill(skin.lcd.x, skin.lcd.y, skin.lcd.w, skin.lcd.h, skin.bg);
-  if (!hp->DisplayOn) return;
+  if (!hp->DisplayOn && !lcd_test) return;
   float cw = skin.cells.w / 12.0f, gw = cw * 0.56f, gh = skin.cells.h * 0.86f;
   float gy = skin.cells.y + (skin.cells.h - gh) / 2;
   for (int i = 0; i < 12; i++)
@@ -206,18 +207,19 @@ static void draw_lcd()
     word lcdchar = (hp->DIS_C_REG[11 - i] << 8) | (hp->DIS_B_REG[11 - i] << 4) | hp->DIS_A_REG[11 - i];
     char ch, punct; unsigned short wch;
     decode_lcdchar(lcdchar, &ch, &wch, &punct);
+    if (lcd_test) { wch = 0xFFFF; punct = '*'; }
     float gx = skin.cells.x + i * cw + cw * 0.14f;
     draw_char(gx, gy, gw, gh, glyph(wch), skin.fg);
     float d = cw * 0.13f, px = gx + gw + cw * 0.12f;
-    if (punct == '.' || punct == ',' || punct == ':') fill(px, gy + gh - d, d, d, skin.fg);
-    if (punct == ':') fill(px, gy + gh * 0.55f, d, d, skin.fg);
-    if (punct == ',') thick_line(px + d * 0.5f, gy + gh, px - d * 0.3f, gy + gh + d * 1.4f, d * 0.7f, skin.fg);
+    if (punct == '.' || punct == ',' || punct == ':' || punct == '*') fill(px, gy + gh - d, d, d, skin.fg);
+    if (punct == ':' || punct == '*') fill(px, gy + gh * 0.55f, d, d, skin.fg);
+    if (punct == ',' || punct == '*') thick_line(px + d * 0.5f, gy + gh, px - d * 0.3f, gy + gh + d * 1.4f, d * 0.7f, skin.fg);
     }
   static const struct { const char *name; float at; } A[12] = {
     {"BAT",0},{"USER",.10f},{"G",.235f},{"RAD",.27f},{"SHIFT",.38f},{"0",.53f},{"1",.565f},{"2",.60f},{"3",.635f},{"4",.67f},{"PRGM",.72f},{"ALPHA",.865f}};
   float px = SDL_min(skin.annrow.h / 7.0f, skin.annrow.w / 225.0f);
   for (int i = 0; i < 12; i++)
-    if (hp->DIS_ANNUN_REG & (0x800 >> i))
+    if (lcd_test || (hp->DIS_ANNUN_REG & (0x800 >> i)))
       draw_text5(skin.annrow.x + A[i].at * skin.annrow.w, skin.annrow.y + (skin.annrow.h - 7 * px) / 2, px, A[i].name, skin.fg);
   }
 
@@ -319,6 +321,7 @@ int main(int argc, char **argv)
     else if (a == "--keys" && i + 1 < argc) keys = argv[++i];
     else if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
     else if (a == "--fresh") fresh = true;
+    else if (a == "--lcdtest") lcd_test = true;
     else if (a.rfind("-psn", 0) == 0) continue;   // passed by Finder on old systems
     else { fprintf(stderr, "usage: hp41 [--skin NAME] [--scale N] [--keys \"...\"] [--screenshot FILE.bmp] [--fresh]\n"); return 2; }
     }
@@ -412,7 +415,8 @@ int main(int argc, char **argv)
         { key_up(pressed_mouse); pressed_mouse = 0; }
       else if (e.type == SDL_KEYDOWN && !e.key.repeat)
         {
-        if (e.key.keysym.sym == SDLK_F9) { turbo = !turbo; SDL_SetWindowTitle(win, turbo ? "HP-41CX (turbo)" : "HP-41CX"); }
+        if (e.key.keysym.sym == SDLK_F10) lcd_test = !lcd_test;
+        else if (e.key.keysym.sym == SDLK_F9) { turbo = !turbo; SDL_SetWindowTitle(win, turbo ? "HP-41CX (turbo)" : "HP-41CX"); }
         else if (!(e.key.keysym.mod & KMOD_GUI)) key_down(map_key(e.key.keysym.sym));
         }
       else if (e.type == SDL_KEYUP) key_up(map_key(e.key.keysym.sym));
