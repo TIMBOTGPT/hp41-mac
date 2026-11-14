@@ -5,7 +5,7 @@ Phase 2 working notes. Last updated 14 November 2026.
 ## How it fits together
 
 - `HPIL.MOD` (the stock HP 82160A HP-IL module ROM) runs unmodified on the
-  Nut CPU. V41's `Hpil` class emulates the 1LB3 chip at register level.
+  Nut CPU. V41's `Hpil` class emulates the HP-IL chip at register level.
 - `src/hpil/tcpip.cpp` is a POSIX port of V41's `Tcpip.cpp`. Frames are 16
   bits, big-endian, one TCP connection each way: the calculator sends to
   `HOST:OUT` and listens on `IN`. Same convention as pyILPER and Emu71.
@@ -13,34 +13,82 @@ Phase 2 working notes. Last updated 14 November 2026.
 - While a frame is in transit the headless driver runs the CPU at authentic
   speed in real time (180 us per instruction, as V41 does with
   `HpilInstrNSec`), so the HP-IL ROM's timeouts match the real loop latency.
-  The rest of the time it runs unthrottled on emulated time.
+  The rest of the time it runs unthrottled on emulated time. Loop latency
+  therefore shows up in emulated time, roughly one to one.
 - `hp41-headless --hpil HOST:OUT:IN --ilog FILE --displog` starts the loop,
-  logs every frame and logs display changes.
-  Frame log columns: emulated seconds, host milliseconds, direction
-  (`>` calculator to loop, `<` loop to calculator), frame, class, data byte.
+  logs every frame and logs display changes. Frame log columns: emulated
+  seconds, host milliseconds, direction (`>` calculator to loop, `<` loop to
+  calculator), frame, class, data byte.
+
+## Our virtual device
+
+`src/ildev/ildev.c` is the device core: plain C99, no allocation, no
+operating system calls, built with `-Wall -Wextra -pedantic -Werror`. Its
+addressing and talker/listener state machine is ported from pyILPER's
+`pildevbase.py` (from ILPER and Christoph Giesselink's C++ base class,
+GPL v2 or later). It is meant to move to the MCU unchanged.
+
+The test device (`build/hp41-ildev`, default ID `ILTESTD`, accessory ID 66):
+
+- As listener it collects bytes into a message, ended by LF or an END frame.
+- As talker (SDA) it sends the last message back as DAB frames, then EOT.
+  With nothing to send, SDA passes on unchanged, as in pyILPER.
+- Answers SAI, SDI and SST. Handles AAU, AAD, AEP, AES, LAD, TAD, SAD, UNL,
+  UNT, IFC, SDC and DCL.
+- Fault injection in the Mac wrapper, by frame number: `--drop`,
+  `--drop-from` (broken loop), `--corrupt`, `--wrongclass`, `--cut`
+  (disconnect), `--delay-us`.
+- `--replay CAPTURE` feeds the calculator's frames from an `--ilog` capture
+  to a fresh device and checks every reply against the capture.
+
+The accessory ID 66 is provisional. Its class meaning has not been checked.
+
+Learned on the way:
+
+- `FINDID` compares the first seven characters, as the HP-IL module manual
+  says (page 53). A six-character ID (`ILTEST`) was never found. A seven-
+  character ID is found with or without CR LF after it.
+- Sending the last byte of a talker message as an END frame failed: the
+  HP-41 passed it on as a DAB frame, the device counted a talker error and
+  the HP-41 showed TRANSMIT ERR. All bytes now go as DAB. Whether a real
+  HP-41 does the same is not known.
 
 ## Observed
 
-Automated, `tests/hpil.sh` (5 checks pass):
+`tests/hpil.sh` (5 checks) and `tests/ildev.sh` (13 checks) pass.
 
-- No partner listening: `DIR` gives `NO DRIVE`. V41 treats an unreachable
-  partner as a closed, empty loop after the first frame. A real HP-41 with
-  an open loop reports a transmission error instead. Not yet handled.
-- Empty loop (`tools/il_loop.py`): `DIR` gives `NO DRIVE`, 32 frames sent and
-  32 received, and the device side logged the same 32 frames in the same
-  order, starting with the power-on `IDY 23`.
+Normal operation with `hp41-ildev`: `FINDID` gives 1, `SELECT`, `OUTA`
+delivers `HELLO` CR LF to the device, `CLA`, `INA` reads `HELLO` back into
+ALPHA. 81 frames each way, no error shown.
 
-Manual, against pyILPER 1.9.1 (TCP/IP mode, out 60001, in 60000, one
-virtual drive), 14 November 2026:
+Error cases, HP-41 behaviour in emulation:
 
-- Loop setup: `AAD 01` came back as `AAD 02`, so one device took address 1.
-  Its reply to Send Accessory ID was `DAB 10`, the mass-storage class.
-- `DIR` displayed `T1      AS`, the ASCII file already on that LIF image.
+| Fault | HP-41 shows |
+| --- | --- |
+| No partner listening at all | `NO DRIVE` for `DIR`. V41 treats the loop as closed and empty. A real HP-41 with an open loop reports a transmission error |
+| A data byte of `OUTA` comes back altered | TRANSMIT ERR |
+| A data byte of `INA` reaches the HP-41 altered | ALPHA holds `HELM`, the device answers ETE, TRANSMIT ERR |
+| Loop breaks during `OUTA` | TRANSMIT ERR, after about 45 s of emulated time |
+| One frame dropped during `OUTA` | TRANSMIT ERR, same delay |
+| Partner disconnects during `OUTA` | TRANSMIT ERR, same delay |
+| `LAD 1` comes back as a data frame | not detected, the session completes |
+| `OUTA` to an address no device holds | not detected |
+| 5 ms delay on every frame | works, 0.36 s slower |
+
+Replay: the clean session replays with 0 of 81 frames different, the golden
+capture `tests/data/findid_outa_ina.ilog` likewise. Replaying with another
+device ID differs from the first ID byte on. Replaying the corrupted-`INA`
+session flags exactly frame 74, the corrupted one.
+
+Against pyILPER 1.9.1 by hand (TCP/IP mode, one virtual drive):
+
+- `AAD 01` came back as `AAD 02` (one device). Send Accessory ID gave
+  `DAB 10`, mass storage.
+- `DIR` displayed `T1      AS`, the file already on that LIF image.
 - On a scratch copy of the image: `SIZE 003`, `"DATA"`, `3 CREATE`, 11 22 33
-  into R00 to R02, `WRTR`, `CLRG` (R01 reads 0), `READR`, `RCL 01` gives
-  `22.0000`. 983 frames each way, none lost. A second `DIR` listed
-  `DATA    DA`. Read on the host, the LIF directory has `DATA` with type
-  E0D0 and the file's first sector holds the BCD digits 11, 22 and 33.
+  into R00 to R02, `WRTR`, `CLRG`, `READR`, `RCL 01` gives `22.0000`.
+  983 frames each way. The LIF directory read on the host has `DATA`, type
+  E0D0, with the BCD digits 11, 22 and 33 in its first sector.
 
 Excerpt of the calculator-side log for the pyILPER loop setup:
 
@@ -49,21 +97,46 @@ Excerpt of the calculator-side log for the pyILPER loop setup:
         1.6368     11.815 > 563 RDY 63      SAI (send accessory ID)
         1.6369     11.880 < 010 DAB 10      mass storage
 
-Reproduce: start pyILPER in TCP/IP mode with a drive, then
+## Throughput
 
-    build/hp41-headless --displog --mod MOD/NUT-CX.MOD --mod MOD/HPIL.MOD \
-      --hpil localhost:60001:60000 --ilog dir.ilog --keys "ON XEQ ALPHA D I R ALPHA WAIT:5"
+Measured with `tools/hpil_throughput.sh 20`: a keyed-in FOCAL loop sends a
+15-character ALPHA string with `OUTA` 20 times (17 bytes each with CR LF) to
+`hp41-ildev`. Times are emulated time at authentic speed (173 us per
+instruction, V41's figure for a halfnut HP-41CX). `--delay-us` adds an
+artificial delay to every frame at the device.
+
+| Mode | Delay per frame | Sustained (LF to LF) | Inside one message | Frames per byte |
+| --- | --- | --- | --- | --- |
+| AUTOIO | 0 | 40.1 bytes/s | 160.0 bytes/s (6.25 ms per byte) | 1.6 |
+| AUTOIO | 250 us | 38.9 | 148.4 | 1.6 |
+| AUTOIO | 500 us | 38.6 | 144.1 | 1.6 |
+| AUTOIO | 1 ms | 37.1 | 131.0 | 1.6 |
+| AUTOIO | 2 ms | 34.6 | 111.6 | 1.6 |
+| MANIO | 0 | 34.9 | 160.0 | 2.0 |
+| MANIO | 1 ms | 32.7 | 131.1 | 2.0 |
+
+Reading:
+
+- Each `OUTA` call costs about 320 ms besides its bytes (FOCAL, re-addressing
+  the loop with AAU and AAD before every call in AUTOIO, LAD, UNL). That
+  overhead, not the loop, sets the sustained rate. MANIO does not help.
+- Inside a message a byte costs 6.25 ms of CPU, about 36 instructions. Loop
+  latency adds about 1.6 times the per-frame delay per byte.
+- At these rates a full 480x320 8-bit screen (153,600 bytes) takes about
+  64 minutes from FOCAL `OUTA` calls, or 16 minutes at the in-message rate.
+  The graphics protocol has to keep drawing on the peripheral and send
+  short commands, and bulk pixels cannot come from user code.
+
+Caveats: this is the emulator's timing model. It has not been compared with
+a real HP-41 and a real loop. The model counts V41's instruction cycle time
+and the measured host latency. It does not model the HP-IL chip's own frame
+transmission time on a real loop. A microcode XROM could cut the per-call
+overhead; how far is unknown until one exists.
 
 ## Not done or not verified
 
-- A loop partner that drops, corrupts or delays frames (broken loop,
-  malformed command, interrupted transfer).
-- Frame capture exists (`--ilog`). Deterministic replay does not.
-- The minimal virtual device of our own (identity, addressing, data,
-  status, errors).
-- Throughput. A first look at the pyILPER session: the median gap between
-  outgoing frames was 2.4 ms of emulated CPU time, 0.19 ms of host time.
-  That is calculator-side cost with a near-instant partner, not a loop
-  throughput figure. The measurement the brief asks for is still to do.
+- The no-partner case does not reproduce a real HP-41's error.
+- Throughput against real hardware.
 - HP-IL in `HP41.app` (the SDL front end does not call `StartHpil` yet).
-- Not tried against Emu71's own calculator on the same loop.
+- Not tried with Emu71's calculator in the same loop.
+- The device's SRQ, status and power functions are present but untested.

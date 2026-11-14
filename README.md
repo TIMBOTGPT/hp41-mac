@@ -10,15 +10,16 @@ Sister project to [emu71-mac](https://github.com/TIMBOTGPT/emu71-mac).
 The V41 emulation core runs on arm64 with an SDL2 window (`HP41.app`) and a
 headless command-line build. The six Phase 1 acceptance tests pass in the
 headless build (`tests/basic.sh`, `tests/phase1.sh`, `tests/clean_build.sh`),
-and the stock HP-IL module talks to pyILPER over a virtual loop
-(`tests/hpil.sh`, [docs/hpil.md](docs/hpil.md)). See docs/emulator-selection.md for exactly what
+and the stock HP-IL module talks over a virtual loop to pyILPER and to this
+project's own portable C test device (`tests/hpil.sh`, `tests/ildev.sh`,
+[docs/hpil.md](docs/hpil.md), which also records the throughput measured). See docs/emulator-selection.md for exactly what
 has and has not been verified.
 
 | Phase | Goal | State |
 | --- | --- | --- |
 | 0 | Inspect candidate engines, build one, choose with evidence | V41 R9O chosen on build evidence |
 | 1 | Working, stateful HP-41CX on arm64 that runs a stock XROM | acceptance tests pass (headless) |
-| 2 | Simulated HP-IL loop with a virtual test peripheral | loop works with pyILPER; device, replay, errors, throughput to do |
+| 2 | Simulated HP-IL loop with a virtual test peripheral | loop, test device, error cases, replay and throughput done in emulation |
 | 3 | Graphics protocol and XROM | not started |
 | 4 | 480x320 indexed-colour multi-screen peripheral on the Mac | not started |
 
@@ -42,7 +43,8 @@ contributors), from which the emulation core is built.
 
     make            # needs the V41 R9O source at ~/Projects/hp41-upstream/v41r9o/src/V41R9
     tests/basic.sh  # or: make UPSTREAM=/path/to/V41R9
-    tests/phase1.sh tests/hpil.sh tests/clean_build.sh
+    tests/phase1.sh tests/hpil.sh tests/ildev.sh tests/clean_build.sh
+    tools/hpil_throughput.sh   # HP-IL throughput at authentic speed
     ./bundle.sh     # builds HP41.app (needs SDL2: brew install sdl2)
 
 ## Running

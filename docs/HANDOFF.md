@@ -41,10 +41,18 @@ Built and observed working:
 - `HP41.app`: skin, mouse and Mac keyboard, 14-segment LCD, annunciators,
   authentic speed, `F9` turbo, `F10` all-segments test. Owner approved the LCD.
 - State persists across runs through V41's `.lod` format.
-- Virtual HP-IL (Phase 2 started): `src/hpil/tcpip.cpp` replaces the stub.
-  `tests/hpil.sh` (5) passes with an empty loop. Against pyILPER 1.9.1 by
-  hand: `DIR` lists the LIF image, and `CREATE`/`WRTR`/`CLRG`/`READR` round
-  trips data. Details and log excerpts in `docs/hpil.md`.
+- Virtual HP-IL (Phase 2, all items done in emulation, see `docs/hpil.md`):
+  - `src/hpil/tcpip.cpp` replaces the stub. `tests/hpil.sh` (5) passes.
+  - Against pyILPER 1.9.1 by hand: `DIR` lists the LIF image, and
+    `CREATE`/`WRTR`/`CLRG`/`READR` round trips data.
+  - Our own device: `src/ildev/ildev.c` (portable C99 core, ported from
+    pyILPER's device base class) and `build/hp41-ildev` (Mac wrapper with
+    fault injection and `--replay`). `tests/ildev.sh` (13) passes: `FINDID`,
+    `OUTA`, `INA`, five fault cases, replay including a committed golden
+    capture in `tests/data/`.
+  - Throughput (`tools/hpil_throughput.sh`): FOCAL `OUTA` loop sustains about
+    40 bytes/s, 160 bytes/s inside one message, CPU-bound below about 1 ms
+    loop delay per frame. Emulator timing model only.
 
 Not done or not verified:
 
@@ -53,6 +61,10 @@ Not done or not verified:
 - HP-IL is headless only. `HP41.app` never calls `StartHpil`.
 - An unreachable loop partner is treated as a closed empty loop (V41
   design), not as the transmission error a real HP-41 would show.
+- A frame returned with the wrong class (LAD as DAB) and `OUTA` to an absent
+  address are not detected by the HP-IL ROM in emulation. Real behaviour
+  unknown.
+- Throughput and error behaviour have not been compared with real hardware.
 - 82143A printer output channel (`Udp`) is discarded. No sound.
 - No way to change the module list from the app. Edit the `$MODULE` lines in
   `HP-41CX.lod` by hand.
@@ -61,17 +73,18 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Phase 2, continued (see `docs/hpil.md`, "Not done"):
-   a minimal virtual device of our own (identity, addressing, data, status,
-   errors), frame replay from an `--ilog` capture, error cases (no device,
-   broken loop, malformed command, interrupted transfer), and the throughput
-   measurement at authentic speed, recorded in the repo. Optionally the same
-   loop with Emu71's calculator in it. Then HP-IL in `HP41.app`.
-2. Phase 3: user-code XROM first, microcode second. Evaluate NutStudio
+1. Phase 3, protocol and user-code XROM. Size the protocol from the
+   throughput above: short commands, drawing on the peripheral, no bulk
+   pixels from user code. The first XROM is FOCAL calling `OUTA`/`INA`
+   (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).
-3. Phase 4: the 480x320 graphics peripheral, standalone on the Mac first.
+   The device side starts from `src/ildev`: the graphics peripheral becomes
+   another device built on the same core.
+2. Phase 4: the 480x320 graphics peripheral, standalone on the Mac first.
    Requirements are in `docs/original-brief-2026-11-14.md`, section 7.
+3. Loose ends from Phase 2, when useful: HP-IL in `HP41.app`, a real HP-41
+   error for an unreachable partner, the same loop with Emu71's calculator.
 
 ## Decisions already made
 
@@ -129,6 +142,10 @@ Not done or not verified:
   CODE functions. Use it to choose a function for trace proofs.
 - `--displog` prints each display change. Needed for HP-IL functions such as
   `DIR` that show results briefly and return to X.
+- `FINDID` matches seven characters. Device IDs must be seven characters
+  long (the test device is `ILTESTD`).
+- In `--keys`, numbers are separate digit keys (`2 0`, not `20`), and digits
+  inside ALPHA need `SHIFT`.
 - `--hpil HOST:OUT:IN` needs `HPIL.MOD` loaded. Tests use 61001/61000 so they
   do not collide with a pyILPER on 60001/60000.
 - Scripted keys hold each key for 3000 instructions, then run until the CPU

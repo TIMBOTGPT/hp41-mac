@@ -11,7 +11,7 @@ GENSRC := HP41GraphicsText MODFile
 HDRS := HP41.h HP41Hpil.h HP41HpilIf.h WFile.h Tcpip.h Udp.h
 OBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/tcpip.o build/main.o
 
-all: build/hp41-headless build/hp41
+all: build/hp41-headless build/hp41 build/hp41-ildev
 
 $(GEN)/.stamp:
 	@test -d "$(V41)" || { echo "Upstream V41 source not found at $(V41)"; exit 1; }
@@ -42,6 +42,11 @@ build/app.o: src/app/main.cpp $(GEN)/.stamp
 	$(CXX) $(CXXFLAGS) $(shell sdl2-config --cflags) -c $< -o $@
 build/hp41: $(COREOBJS) build/app.o
 	$(CXX) -arch arm64 $(COREOBJS) build/app.o -o $@ $(shell sdl2-config --libs) -lpthread
+
+# portable HP-IL test device: the core must build as strict C99 with warnings on
+build/hp41-ildev: src/ildev/ildev.c src/ildev/ildev.h src/ildev/main.c
+	mkdir -p build
+	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror src/ildev/ildev.c src/ildev/main.c -o $@
 
 clean:
 	rm -rf build
