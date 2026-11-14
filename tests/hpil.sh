@@ -23,7 +23,7 @@ got=$(final "$TMP/none.out")
 # 2. empty loop: every frame goes round and comes back, both sides log it
 python3 "$HERE/../tools/il_loop.py" --out $OUT --in $IN --log "$TMP/dev.log" > "$TMP/loop.out" 2>&1 &
 LOOP=$!
-sleep 0.5
+i=0; while ! grep -q listening "$TMP/loop.out" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
 "$BIN" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --hpil localhost:$OUT:$IN --ilog "$TMP/calc.log" --keys "$DIR" > "$TMP/loop1.out"
 got=$(final "$TMP/loop1.out")
 [ "$got" = "NO DRIVE" ] && pass "empty loop: DIR [$got]" || bad "empty loop: DIR expected [NO DRIVE] got [$got]"

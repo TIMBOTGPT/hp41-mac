@@ -20,7 +20,8 @@ SETUP="ON 1 $X S E L E C T ALPHA"
 echo "mode ${MODE:-AUTOIO}, $N x OUTA of 17 bytes"
 for d in ${DELAYS:-0 250 500 1000 2000}; do
   "$B/hp41-ildev" --out 61001 --in 61000 --delay-us "$d" > "$TMP/dev.out" 2>&1 &
-  dev=$!; sleep 0.3
+  dev=$!
+  i=0; while ! grep -q listening "$TMP/dev.out" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
   "$B/hp41-headless" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --hpil localhost:61001:61000 \
      --ilog "$TMP/t.ilog" --keys "$SETUP $PROG $KN XEQ 0 1" > "$TMP/calc.out"
   sleep 0.2; kill $dev 2>/dev/null; wait $dev 2>/dev/null

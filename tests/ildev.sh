@@ -19,7 +19,9 @@ FULL="ON ALPHA I L T E S T D ALPHA $X F I N D I D ALPHA $X S E L E C T ALPHA ALP
 
 session() { # name, device options
   "$B/hp41-ildev" --out 61001 --in 61000 --log "$TMP/$1.dev" $2 > "$TMP/$1.devout" 2>&1 &
-  dev=$!; sleep 0.3
+  dev=$!
+  # wait for the device to listen (a freshly built binary can be slow to start the first time)
+  i=0; while ! grep -q listening "$TMP/$1.devout" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
   "$B/hp41-headless" --displog --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --hpil localhost:61001:61000 \
      --ilog "$TMP/$1.ilog" --keys "$FULL" > "$TMP/$1.calc"
   sleep 0.2; kill $dev 2>/dev/null; wait $dev 2>/dev/null
