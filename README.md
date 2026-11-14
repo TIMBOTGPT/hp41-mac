@@ -22,6 +22,7 @@ has and has not been verified.
 
 ## Documents
 
+- [docs/HANDOFF.md](docs/HANDOFF.md) - current state, next steps and technical notes
 - [PROJECT_BRIEF.md](PROJECT_BRIEF.md) - working brief (Phases 0 to 2 in detail)
 - [docs/emulator-selection.md](docs/emulator-selection.md) - engine candidates and open questions
 - [docs/original-brief-2026-11-14.md](docs/original-brief-2026-11-14.md) - the original brief, including the full Phase 3/4 graphics requirements
