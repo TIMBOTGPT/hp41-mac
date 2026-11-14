@@ -21,7 +21,10 @@ static int64_t now_ns() { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts
 BOOL QueryPerformanceFrequency(LARGE_INTEGER *p) { p->QuadPart = 1000000000LL; return TRUE; }
 BOOL QueryPerformanceCounter(LARGE_INTEGER *p) { p->QuadPart = now_ns(); return TRUE; }
 void Sleep(DWORD ms) { usleep((useconds_t)ms * 1000); }
-DWORD GetTickCount() { return (DWORD)(now_ns() / 1000000LL); }
+// A driver may substitute an emulated millisecond clock (the headless build
+// does, so timer tests are deterministic). The default is the host clock.
+DWORD (*g_tick_source)() = NULL;
+DWORD GetTickCount() { return g_tick_source ? g_tick_source() : (DWORD)(now_ns() / 1000000LL); }
 DWORD timeGetTime() { return GetTickCount(); }
 void GetLocalTime(SYSTEMTIME *st)
   {

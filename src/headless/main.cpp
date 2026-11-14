@@ -36,6 +36,21 @@ static std::string annunciators()
   return r;
   }
 
+// Emulated time. Each loop step, executed or sleeping, stands for one
+// instruction cycle of a halfnut HP-41CX (173 us, DEFAULT_INST_SPEED in
+// HP41.h). The Time module is stepped every 10 ms of emulated time, as
+// V41's Windows multimedia timer would. Results do not depend on host speed.
+static uint64_t g_emu_us = 0;
+static DWORD emu_ms() { return (DWORD)(g_emu_us / 1000); }
+
+static void tick()
+  {
+  uint64_t before = g_emu_us / 10000;
+  g_emu_us += DEFAULT_INST_SPEED;
+  if (g_emu_us / 10000 != before && hp->fTimer)
+    HP41::TimerProc(0, 0, (DWORD_PTR)hp, 0, 0);
+  }
+
 // run until the CPU sleeps (idle waiting for a key) or the limit is reached
 static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
   {
@@ -46,9 +61,10 @@ static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
     if (hp->IsSleeping())
       {
       if (stop_on_sleep) break;
-      n++; continue;
+      tick(); n++; continue;
       }
     hp->Execute();
+    tick();
     n++;
     }
   g_instr += n;
@@ -81,6 +97,13 @@ static const std::map<std::string, int> &keymap()
 
 static bool press(const std::string &name)
   {
+  if (name.compare(0, 5, "WAIT:") == 0)   // let emulated time pass, CPU awake or asleep
+    {
+    double sec = atof(name.c_str() + 5);
+    run((uint64_t)(sec * 1e6 / DEFAULT_INST_SPEED), false);
+    printf("wait %.1f s -> [%-24s] ann[%s] (emulated time %.2f s)\n", sec, display().c_str(), annunciators().c_str(), g_emu_us / 1e6);
+    return true;
+    }
   auto it = keymap().find(name);
   if (it == keymap().end()) { fprintf(stderr, "unknown key: %s\n", name.c_str()); return false; }
   byte code = (byte)it->second;
@@ -101,10 +124,12 @@ int main(int argc, char **argv)
     if (a == "--mod" && i + 1 < argc) mods.push_back(argv[++i]);
     else if (a == "--keys" && i + 1 < argc) keys = argv[++i];
     else if (a == "--trace" && i + 1 < argc) trace = argv[++i];
+    else if (a == "--modinfo" && i + 1 < argc) return output_mod_info(stdout, argv[++i], 1, 1, NULL);
     else { fprintf(stderr, "usage: %s [--trace FILE] --mod FILE.MOD ... [--keys \"ON 2 ENTER 3 +\"]\n", argv[0]); return 2; }
     }
   if (mods.empty()) { fprintf(stderr, "no --mod given\n"); return 2; }
 
+  g_tick_source = emu_ms;
   realpath(argv[0], theApp.szAppFullPath);
   theApp.szSessionName[0] = 0;
   static CMainWindow wnd; theApp.pMainWnd = theApp.m_pMainWnd = &wnd;
@@ -131,5 +156,6 @@ int main(int argc, char **argv)
   if (hp->GetTrace()) hp->StopTrace();
   printf("final display: [%s]\n", display().c_str());
   printf("instructions executed: %llu\n", (unsigned long long)g_instr);
+  printf("emulated time: %.2f s\n", g_emu_us / 1e6);
   return rc;
   }

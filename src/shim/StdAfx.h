@@ -153,6 +153,7 @@ BOOL QueryPerformanceCounter(LARGE_INTEGER *p);
 void Sleep(DWORD ms);
 DWORD GetTickCount();
 DWORD timeGetTime();
+extern DWORD (*g_tick_source)();
 void GetLocalTime(SYSTEMTIME *st);
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
 typedef void (CALLBACK *LPTIMECALLBACK)(UINT, UINT, DWORD_PTR, DWORD_PTR, DWORD_PTR);
