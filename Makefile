@@ -1,0 +1,40 @@
+# hp41-mac headless build.
+# The V41 emulation core is compiled unmodified from an upstream checkout
+# (not stored in this repository). See docs/emulator-selection.md.
+UPSTREAM ?= $(HOME)/Projects/hp41-upstream/v41r9o/src/V41R9
+V41 := $(UPSTREAM)/V41
+GEN := build/gen
+CXX := clang++
+CXXFLAGS := -std=c++17 -O2 -arch arm64 -fms-extensions -w -include src/shim/StdAfx.h -I$(GEN) -Isrc/shim
+CORE := HP41Kernel HP41Display HP41Timer HP41Hpil HP41File HP41Trace HP41Printer HP41Infrared WFile
+GENSRC := HP41GraphicsText MODFile
+HDRS := HP41.h HP41Hpil.h HP41HpilIf.h WFile.h Tcpip.h Udp.h
+OBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/main.o
+
+all: build/hp41-headless
+
+$(GEN)/.stamp:
+	@test -d "$(V41)" || { echo "Upstream V41 source not found at $(V41)"; exit 1; }
+	mkdir -p $(GEN)
+	for f in $(CORE); do cp "$(V41)/$$f.cpp" $(GEN)/; done
+	for h in $(HDRS); do cp "$(V41)/$$h" $(GEN)/; done
+	cp "$(V41)/Tcpip.h" $(GEN)/TcpIp.h 2>/dev/null || true
+	sed -n '1,122p;225,$$p' "$(V41)/HP41Graphics.cpp" > $(GEN)/HP41GraphicsText.cpp
+	cp "$(UPSTREAM)/MODFile/MODFile.c" $(GEN)/MODFile.cpp
+	sed -E '/^typedef unsigned (char byte|short word|long dword);/d' "$(UPSTREAM)/MODFile/MODFile.h" > $(GEN)/MODFile.h
+	touch $@
+
+build/%.o: $(GEN)/.stamp
+	$(CXX) $(CXXFLAGS) -c $(GEN)/$*.cpp -o $@
+build/shim.o: src/shim/shim.cpp src/shim/StdAfx.h
+	mkdir -p build && $(CXX) $(CXXFLAGS) -c $< -o $@
+build/stubs.o: src/headless/stubs.cpp $(GEN)/.stamp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/main.o: src/headless/main.cpp $(GEN)/.stamp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/hp41-headless: $(OBJS)
+	$(CXX) -arch arm64 $(OBJS) -o $@ -lpthread
+
+clean:
+	rm -rf build
+.PHONY: all clean

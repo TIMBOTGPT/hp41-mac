@@ -1,7 +1,7 @@
 # Emulator engine selection
 
-Status: **provisional**. Nothing below has been confirmed by inspecting
-source or building on arm64. Each claim is marked with where it comes from.
+Status: **V41 selected as the working engine** on build evidence (see the
+last section). Candidates B and C have not been inspected or built. Each claim is marked with where it comes from.
 This document is complete only when the "to verify" columns are filled from
 actual inspection and build output.
 
@@ -72,10 +72,10 @@ MCU portability of the core is not a criterion. See PROJECT_BRIEF.md.
 | Check | V41 | Nonpareil | Emu41gg |
 | --- | --- | --- | --- |
 | Source obtained, version, licence text read | R9O source, GPL v2 or later (file headers) | | |
-| Core separable from UI | Likely, by source scan (see below). Not yet proven by a build | | |
-| Builds on arm64 | | | |
-| Boots HP-41CX ROM | | | |
-| Loads a plug-in ROM | | | |
+| Core separable from UI | Yes. Nine core files compile unmodified against a shim | | |
+| Builds on arm64 | Yes, headless (`make`), Mach-O arm64 | | |
+| Boots HP-41CX ROM | Yes, `MEMORY LOST`, then `2 ENTER 3 +` gives `5.0000` | | |
+| Loads a plug-in ROM | `HPIL.MOD` and `MATH.MOD` load. No function executed yet | | |
 | HP-IL module ROM runs | | | |
 | Talks to pyILPER | | | |
 
@@ -119,3 +119,33 @@ Source inspection only. Nothing has been compiled.
 - Still to verify: that the HP-IL module is emulated at register level with
   `HPIL.MOD` executing, the instruction trace facility in `HP41Trace.cpp`,
   and an actual arm64 build.
+
+## V41 R9O headless build on arm64 (14 Nov 2026)
+
+Observed output, MacBook Air M4, Apple clang.
+
+- Compiled unmodified from the upstream download: `HP41Kernel`, `HP41Display`,
+  `HP41Timer`, `HP41Hpil`, `HP41File`, `HP41Trace`, `HP41Printer`,
+  `HP41Infrared`, `WFile`, plus `MODFile.c` and the text-only part of
+  `HP41Graphics.cpp`. The build copies them into `build/gen`. Two mechanical
+  edits are made at copy time: the `Draw` routine is dropped from
+  `HP41Graphics.cpp`, and three typedefs are removed from `MODFile.h` so that
+  `dword` stays 32 bits.
+- `src/shim` supplies the Win32/MFC subset the core needs. `src/headless`
+  supplies stand-ins for the UI, sound, printer channel and TCP/IP, and a
+  command-line driver with scripted keys.
+- `tests/basic.sh`: 7 of 7 pass (cold start, `2 ENTER 3 +`, `sin 30`,
+  `STO`/`RCL`, stack roll and swap, PRGM mode showing `00 REG 219`, ALPHA entry).
+- `NUT-CX.MOD` reports 4 memory modules, 1 extended memory module and the timer.
+- V41's own instruction trace works (`--trace FILE`).
+- Source reading confirms HP-IL is emulated at register level
+  (`Hpil::exec_perph_hpil`, `HPIL_REG[9]`), so the real HP-IL ROM executes.
+  Not yet exercised.
+
+Not done or not verified:
+
+- No UI. No persistence test. No user program test. No plug-in function run.
+- The timer module clock does not tick. Windows multimedia timers are stubbed.
+- HP-IL transport is a stub. Nothing is sent or received.
+- Key hold time and run limits in the driver are fixed guesses that work for
+  the tests above.
