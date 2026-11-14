@@ -1,5 +1,5 @@
 // hp41-mac headless build: stand-ins for the parts of V41 that are user
-// interface, sound or networking. The emulation core itself is upstream V41.
+// interface, sound or the printer channel. The emulation core itself is upstream V41.
 // SetKeyDown, SetKeyUp and IsKeyPressed are taken from V41's HP41Keyboard.cpp
 // (Copyright (c) 1989-2002 Warren Furlow, GPL v2 or later).
 #include "StdAfx.h"
@@ -52,14 +52,7 @@ void HP41::SetKeyUp(byte KeyCode)
   keytable[KeyCode] = 0;
   }
 
-// ---- virtual HP-IL transport: not connected in this build ----
-TcpIp::TcpIp(HpilIf *pHpil, LPCTSTR lpszAddrOut, WORD wPortOut, WORD wPortIn)
-  : m_pHpil(pHpil), m_strAddrOut(lpszAddrOut), m_wPortOut(wPortOut), m_wPortIn(wPortIn),
-    m_dwConnectTimeout(0), m_bRunning(false), m_hWorkerThread(NULL), m_nNumSocks(0), m_cfd(-1), m_sClient(-1) {}
-TcpIp::~TcpIp() {}
-bool TcpIp::TcpCreateSvr() { return false; }
-VOID TcpIp::TcpCloseSvr() {}
-bool TcpIp::TcpSendFrame(WORD) { return true; }
+// ---- virtual HP-IL transport: see src/hpil/tcpip.cpp ----
 
 // ---- 82143A printer output channel: discarded ----
 Udp *Udp::pInstance_ = NULL;

@@ -1,6 +1,6 @@
 # hp41-mac handoff
 
-Last updated 14 November 2026. Read this first when resuming work.
+Last updated 14 November 2026 (late evening). Read this first when resuming work.
 
 ## Where things are
 
@@ -14,6 +14,7 @@ Last updated 14 November 2026. Read this first when resuming work.
 | HP Museum DVD set (manuals, books) | `/Volumes/NAS RAID/12_Hobbies/COMPUTER HOBBY/HP Calc DVDs and Docs` |
 | HP internal documentation (HP-IL chip, Nut CPU, VASM listings) | `/Volumes/NAS RAID/12_Hobbies/HP DVDs and Docs/HP Stuff/Internal Documentation` |
 | Reference project | `~/Projects/emu71-mac` (do not edit from this project) |
+| pyILPER 1.9.1 (own venv) | `~/Projects/hp41-upstream/pyilper-venv/bin/pyilper`; settings in `~/Library/Application Support/pyilper/pyilper2`, drive image `~/pyilper_test/disk1.dat` (use a copy for write tests) |
 
 The NAS folder `12_Hobbies/HP DVDs and Docs/HP41-DVD` is a mostly empty
 directory skeleton. Use `~/Downloads/HP41-R3` instead.
@@ -28,25 +29,30 @@ Built and observed working:
 - `make` builds `build/hp41-headless` (command line) and `build/hp41` (SDL2).
   `./bundle.sh` builds `HP41.app`.
 - Nine V41 core files compile unmodified against `src/shim`.
-- `tests/basic.sh`: 7 of 7 pass against `NUT-CX.MOD`.
+- Phase 1 acceptance tests 1 to 6 pass in the headless build:
+  `tests/basic.sh` (7), `tests/phase1.sh` (7), `tests/clean_build.sh`
+  (clone of HEAD builds, arm64 only, all tests pass, app launches).
+  - Keyed-in 17-step n! program with a GTO loop and X=0? branch: 5 gives 120,
+    8 gives 40,320.
+  - Advantage Pac `AND` (MCODE, XROM 22,08): 12 AND 10 gives 8, and the trace
+    shows `GOTOC` at 2FBD jumping to 8309, the function's entry in page 8.
+    Math Pac functions do not prove this: they are FOCAL programs in ROM.
+  - Time module: `SETIME 0`, 60 emulated seconds, `TIME` shows 12:01:04 AM.
 - `HP41.app`: skin, mouse and Mac keyboard, 14-segment LCD, annunciators,
-  authentic speed, `F9` turbo, `F10` all-segments test.
-- State persists across runs through V41's `.lod` format
-  (`42 STO 05`, quit, relaunch, `RCL 05` gives `42.0000`).
-- `HPIL.MOD` and `MATH.MOD` load. V41's instruction trace works
-  (`hp41-headless --trace FILE`).
-- The owner has used the window by hand and approved the LCD drawing.
+  authentic speed, `F9` turbo, `F10` all-segments test. Owner approved the LCD.
+- State persists across runs through V41's `.lod` format.
+- Virtual HP-IL (Phase 2 started): `src/hpil/tcpip.cpp` replaces the stub.
+  `tests/hpil.sh` (5) passes with an empty loop. Against pyILPER 1.9.1 by
+  hand: `DIR` lists the LIF image, and `CREATE`/`WRTR`/`CLRG`/`READR` round
+  trips data. Details and log excerpts in `docs/hpil.md`.
 
 Not done or not verified:
 
-- Phase 1 acceptance items still open: a keyed-in user program with a loop or
-  branch; a plug-in ROM function executed, with a trace showing the program
-  counter inside the module's page; clean-checkout build on arm64.
-- Timer module: advanced every 10 ms in the SDL app, but timekeeping has not
-  been checked. It does not tick at all in the headless build.
-- HP-IL transport is a stub (`src/headless/stubs.cpp`, class `TcpIp`). The
-  register-level HP-IL emulation (`Hpil::exec_perph_hpil`) is compiled in but
-  has never been exercised.
+- Program editing and SST/BST are not tested on their own.
+- Timer in `HP41.app` runs on host time and its accuracy is not checked.
+- HP-IL is headless only. `HP41.app` never calls `StartHpil`.
+- An unreachable loop partner is treated as a closed empty loop (V41
+  design), not as the transmission error a real HP-41 would show.
 - 82143A printer output channel (`Udp`) is discarded. No sound.
 - No way to change the module list from the app. Edit the `$MODULE` lines in
   `HP-41CX.lod` by hand.
@@ -55,19 +61,16 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Finish Phase 1 in the headless build: program entry test, plug-in ROM
-   function with trace proof (Math Pac or `EXT-FUNS`), a ticking timer in
-   headless, clean-checkout build. Add each to `tests/`.
-2. Phase 2: replace the `TcpIp` stub with a POSIX port of V41's `Tcpip.cpp`
-   (virtual HP-IL over TCP/IP, default ports out 60001, in 60000). Add
-   `HPIL.MOD` to the session. Prove a loop against pyILPER and against
-   `emu71-mac`'s loop. Then a minimal virtual device, frame capture and
-   replay, error cases, and a throughput measurement at authentic speed.
-   Reference: https://hp.giesselink.com/hpil.htm
-3. Phase 3: user-code XROM first, microcode second. Evaluate NutStudio
+1. Phase 2, continued (see `docs/hpil.md`, "Not done"):
+   a minimal virtual device of our own (identity, addressing, data, status,
+   errors), frame replay from an `--ilog` capture, error cases (no device,
+   broken loop, malformed command, interrupted transfer), and the throughput
+   measurement at authentic speed, recorded in the repo. Optionally the same
+   loop with Emu71's calculator in it. Then HP-IL in `HP41.app`.
+2. Phase 3: user-code XROM first, microcode second. Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).
-4. Phase 4: the 480x320 graphics peripheral, standalone on the Mac first.
+3. Phase 4: the 480x320 graphics peripheral, standalone on the Mac first.
    Requirements are in `docs/original-brief-2026-11-14.md`, section 7.
 
 ## Decisions already made
@@ -118,12 +121,22 @@ Not done or not verified:
 - Key codes: ON 18, USER c6, PRGM c5, ALPHA c4. Rows of five: 10 30 70 80 c0,
   11 31 71 81 c1, 12 32 72 82 c2. ENTER 13, CHS 73, EEX 83, back c3. Then
   14 34 74 84 (minus 7 8 9), 15 35 75 85, 16 36 76 86, 17 37 77 87.
+- The headless driver runs on emulated time: 173 us per loop step, Time
+  module stepped every 10 ms of it (`g_tick_source` in the shim replaces the
+  host clock). `WAIT:<seconds>` in `--keys` lets time pass. Keystrokes cost
+  about 0.55 s each.
+- `--modinfo FILE.MOD` prints pages and the FAT, marking MCODE versus USER
+  CODE functions. Use it to choose a function for trace proofs.
+- `--displog` prints each display change. Needed for HP-IL functions such as
+  `DIR` that show results briefly and return to X.
+- `--hpil HOST:OUT:IN` needs `HPIL.MOD` loaded. Tests use 61001/61000 so they
+  do not collide with a pyILPER on 60001/60000.
 - Scripted keys hold each key for 3000 instructions, then run until the CPU
   sleeps. These are fixed guesses that work for the current tests. A long
   running program will need `R/S` handling and a larger limit.
 - HP-IL in V41 is register level (`HPIL_REG[9]`, `HpilIf::SendFrame` and
   `RecvFrame` with a 16-bit frame). `HP41::StartHpil()` creates the `TcpIp`
-  object and the auto-IDY thread. It is never called yet.
+  object and the auto-IDY thread. The headless driver calls it for `--hpil`.
 - Skin PNGs are rendered from SVG with headless Chrome
   (`tools/render_skin.sh`). Layout files are plain text, 1x pixel units.
 - Screenshots for checking: `build/hp41 --keys "..." --screenshot out.bmp`.

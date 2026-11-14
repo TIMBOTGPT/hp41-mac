@@ -9,7 +9,7 @@ CXXFLAGS := -std=c++17 -O2 -arch arm64 -fms-extensions -w -include src/shim/StdA
 CORE := HP41Kernel HP41Display HP41Timer HP41Hpil HP41File HP41Trace HP41Printer HP41Infrared WFile
 GENSRC := HP41GraphicsText MODFile
 HDRS := HP41.h HP41Hpil.h HP41HpilIf.h WFile.h Tcpip.h Udp.h
-OBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/main.o
+OBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/tcpip.o build/main.o
 
 all: build/hp41-headless build/hp41
 
@@ -30,12 +30,14 @@ build/shim.o: src/shim/shim.cpp src/shim/StdAfx.h
 	mkdir -p build && $(CXX) $(CXXFLAGS) -c $< -o $@
 build/stubs.o: src/headless/stubs.cpp $(GEN)/.stamp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/tcpip.o: src/hpil/tcpip.cpp src/hpil/hpil_log.h $(GEN)/.stamp
+	$(CXX) $(CXXFLAGS) -Isrc/hpil -c $< -o $@
 build/main.o: src/headless/main.cpp $(GEN)/.stamp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Isrc/hpil -c $< -o $@
 build/hp41-headless: $(OBJS)
 	$(CXX) -arch arm64 $(OBJS) -o $@ -lpthread
 
-COREOBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o
+COREOBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/tcpip.o
 build/app.o: src/app/main.cpp $(GEN)/.stamp
 	$(CXX) $(CXXFLAGS) $(shell sdl2-config --cflags) -c $< -o $@
 build/hp41: $(COREOBJS) build/app.o

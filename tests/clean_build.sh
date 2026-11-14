@@ -27,6 +27,7 @@ for b in hp41-headless hp41; do
 done
 sh "$WORK/src/tests/basic.sh"  "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/phase1.sh" "$UPSTREAM/MOD" || fail=1
+sh "$WORK/src/tests/hpil.sh"   "$UPSTREAM/MOD" || fail=1
 
 # launch the window build once; it saves state on exit, so keep the user's copy
 [ -f "$STATE" ] && cp "$STATE" "$WORK/state.bak"

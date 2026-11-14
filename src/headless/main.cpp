@@ -2,9 +2,12 @@
 // Loads MOD files, runs the V41 Nut core, feeds scripted keys and prints
 // the display. Used for automated acceptance tests.
 //
-//   hp41-headless [--trace FILE] [--state FILE] --mod A.MOD [--mod B.MOD ...] [--keys "ON 2 ENTER 3 +"]
+//   hp41-headless [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] --mod A.MOD [--mod B.MOD ...] [--keys "ON 2 ENTER 3 +"]
+//   hp41-headless --modinfo A.MOD
 #include "StdAfx.h"
 #include "V41.h"
+#include "HP41Hpil.h"
+#include "hpil_log.h"
 #include <map>
 #include <string>
 #include <sstream>
@@ -51,6 +54,58 @@ static void tick()
     HP41::TimerProc(0, 0, (DWORD_PTR)hp, 0, 0);
   }
 
+// ---- virtual HP-IL ----
+// Frame log: one line per frame, emulated time, host time since start,
+// direction ('>' calculator to loop, '<' loop to calculator), frame, class.
+static FILE *g_ilog = NULL;
+static pthread_mutex_t g_ilog_mx = PTHREAD_MUTEX_INITIALIZER;
+static int64_t g_t0_ns = 0;
+static uint64_t g_frames_out = 0, g_frames_in = 0;
+static int64_t host_ns() { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec; }
+
+static const char *frame_class(WORD f)
+  {
+  static const char *c[8] = {"DAB","DSR","END","ESR","CMD","RDY","IDY","ISR"};
+  return c[(f >> 8) & 7];
+  }
+
+static void log_frame(char dir, WORD f)
+  {
+  pthread_mutex_lock(&g_ilog_mx);
+  if (dir == '>') g_frames_out++; else g_frames_in++;
+  if (g_ilog)
+    {
+    fprintf(g_ilog, "%10.4f %10.3f %c %03X %s %02X\n", g_emu_us / 1e6, (host_ns() - g_t0_ns) / 1e6, dir, f & 0x7ff, frame_class(f), f & 0xff);
+    fflush(g_ilog);
+    }
+  pthread_mutex_unlock(&g_ilog_mx);
+  }
+
+// While a frame is in transit, V41 runs the CPU at authentic speed in real
+// time (HpilInstrNSec in HP41Kernel.cpp), so the HP-IL ROM's timeouts, which
+// count instructions, match the real latency of the loop. Same here: 180 us
+// of host time per instruction while Hpil::IsFrameInTransfer is true.
+static int64_t g_pace_ns = 0;
+static void pace_hpil()
+  {
+  if (!hp->fHPIL || !hp->m_pTcpIp) return;
+  if (!hp->m_pHpil->IsFrameInTransfer(1)) { g_pace_ns = 0; return; }
+  int64_t now = host_ns();
+  if (g_pace_ns == 0 || g_pace_ns < now - 1000000) g_pace_ns = now;
+  g_pace_ns += 180000;
+  while (host_ns() < g_pace_ns) { }
+  }
+
+// --displog: print every change of the display, sampled every 500 instructions
+static bool g_displog = false;
+static std::string g_lastdisp;
+static void sample_display(uint64_t n)
+  {
+  if (!g_displog || n % 500) return;
+  std::string d = display();
+  if (d != g_lastdisp) { printf("  %9.3f s  [%s]\n", g_emu_us / 1e6, d.c_str()); g_lastdisp = d; }
+  }
+
 // run until the CPU sleeps (idle waiting for a key) or the limit is reached
 static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
   {
@@ -63,9 +118,11 @@ static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
       if (stop_on_sleep) break;
       tick(); n++; continue;
       }
+    pace_hpil();
     hp->Execute();
     tick();
     n++;
+    sample_display(n);
     }
   g_instr += n;
   return n;
@@ -117,15 +174,18 @@ static bool press(const std::string &name)
 
 int main(int argc, char **argv)
   {
-  std::vector<std::string> mods; std::string keys, trace, wait;
+  std::vector<std::string> mods; std::string keys, trace, wait, hpil, ilog;
   for (int i = 1; i < argc; i++)
     {
     std::string a = argv[i];
     if (a == "--mod" && i + 1 < argc) mods.push_back(argv[++i]);
     else if (a == "--keys" && i + 1 < argc) keys = argv[++i];
     else if (a == "--trace" && i + 1 < argc) trace = argv[++i];
+    else if (a == "--hpil" && i + 1 < argc) hpil = argv[++i];
+    else if (a == "--ilog" && i + 1 < argc) ilog = argv[++i];
+    else if (a == "--displog") g_displog = true;
     else if (a == "--modinfo" && i + 1 < argc) return output_mod_info(stdout, argv[++i], 1, 1, NULL);
-    else { fprintf(stderr, "usage: %s [--trace FILE] --mod FILE.MOD ... [--keys \"ON 2 ENTER 3 +\"]\n", argv[0]); return 2; }
+    else { fprintf(stderr, "usage: %s [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] --mod FILE.MOD ... [--keys \"ON 2 ENTER 3 +\"]\n", argv[0]); return 2; }
     }
   if (mods.empty()) { fprintf(stderr, "no --mod given\n"); return 2; }
 
@@ -144,6 +204,20 @@ int main(int argc, char **argv)
     }
   hp->SetKeyboard(HP41::eKeyboardSmall, 0, 0, 0);
   printf("config: MemModules=%d XMemModules=%d timer=%d hpil=%d printer=%d\n", hp->MemModules, hp->XMemModules, hp->fTimer, hp->fHPIL, hp->fPrinter);
+  g_t0_ns = host_ns();
+  g_hpil_frame_log = log_frame;
+  if (!ilog.empty() && !(g_ilog = fopen(ilog.c_str(), "w"))) { perror(ilog.c_str()); return 1; }
+  if (g_ilog) fprintf(g_ilog, "# emu_s host_ms dir frame class data\n");
+  if (!hpil.empty())
+    {
+    char host[256]; unsigned out = 0, in = 0;
+    if (sscanf(hpil.c_str(), "%255[^:]:%u:%u", host, &out, &in) != 3) { fprintf(stderr, "--hpil wants HOST:OUT:IN\n"); return 2; }
+    if (!hp->fHPIL) { fprintf(stderr, "--hpil given but no HP-IL module loaded\n"); return 2; }
+    hp->strAddrOut = host; hp->wPortOut = (word)out; hp->wPortIn = (word)in;
+    hp->StartHpil();
+    printf("hpil: %s, sending to %s:%u, listening on %u\n", hp->m_pTcpIp ? "virtual loop" : "FAILED to start", host, out, in);
+    if (!hp->m_pTcpIp) return 1;
+    }
   if (!trace.empty())
     {
     strncpy(hp->szTraceFilename, trace.c_str(), sizeof(hp->szTraceFilename) - 1);
@@ -154,6 +228,9 @@ int main(int argc, char **argv)
   while (ss >> k) if (!press(k)) { rc = 1; break; }
 
   if (hp->GetTrace()) hp->StopTrace();
+  if (hp->m_pTcpIp) hp->StopHpil();
+  if (hp->fHPIL) printf("hpil frames: %llu sent, %llu received\n", (unsigned long long)g_frames_out, (unsigned long long)g_frames_in);
+  if (g_ilog) fclose(g_ilog);
   printf("final display: [%s]\n", display().c_str());
   printf("instructions executed: %llu\n", (unsigned long long)g_instr);
   printf("emulated time: %.2f s\n", g_emu_us / 1e6);
