@@ -1,0 +1,85 @@
+# Emulator engine selection
+
+Status: **provisional**. Nothing below has been confirmed by inspecting
+source or building on arm64. Each claim is marked with where it comes from.
+This document is complete only when the "to verify" columns are filled from
+actual inspection and build output.
+
+## Selection criteria, in order
+
+1. Authentic Nut CPU and ROM execution with robust plug-in ROM support.
+2. Working HP-IL module emulation, ideally compatible with virtual HP-IL
+   over TCP/IP as used by emu71-mac and pyILPER.
+3. Reproducible arm64 macOS build.
+4. Accessible source under a usable licence.
+5. Effort to replace the user interface with SDL2.
+
+MCU portability of the core is not a criterion. See PROJECT_BRIEF.md.
+
+## Candidates
+
+### A. V41 release 9 (Warren Furlow, Christoph Giesselink) - provisional first choice
+
+- Reported: GPL. Windows program. Release 9 added a virtual HP-IL
+  implementation, and later releases tied HP-IL controller timeouts to Nut
+  instruction cycles. Giesselink documents V41 and Emu71 running in the
+  same TCP/IP loop. (hpcalc.org listing, HP Museum forum release notes,
+  hp.giesselink.com)
+- Why first: it is the only candidate where HP-IL is reported to exist in
+  the maintained version and to speak the transport this project already
+  uses. The port is the same kind of job as emu71-mac (Giesselink Win32
+  code to SDL2).
+- To verify: where the current source is published and its exact licence
+  version. How tightly the core is bound to the Windows UI. MOD file and
+  plug-in ROM handling. Whether the HP-IL module is emulated at register
+  level with the real ROM.
+
+### B. Nonpareil (Eric Smith)
+
+- Reported: GPL-2. Microcode-level, HP-41CV and CX supported, 82143A
+  printer simulated. GTK+ 2 UI. MacPorts carries 0.79. HP-IL is not in the
+  main line. A third-party patch from 2009 (Khanh-Dang Nguyen Thu Lam)
+  added it. (GitHub README, MacPorts, HP Museum forum archive)
+- Why second: cleanest and best-known Nut core, but Phase 2 would mean
+  porting an old patch or writing HP-IL emulation.
+- To verify: whether the 2009 HP-IL patch is still obtainable and applies.
+  State of the Nut core in the current GitHub tree.
+- Local note: `~/Projects/nonpareil-mba` is a macOS fork covering other
+  calculator families. Whether it contains anything reusable for the 41 has
+  not been checked.
+
+### C. Emu41 / Emu41gg (Jean-Francois Garnier, Michael Moller)
+
+- Reported: Emu41 is a 16-bit DOS program with built-in HP-IL and virtual
+  devices. Source released under GPL at version 2.50 in December 2009,
+  declared final. Emu41gg is a gcc port by Michael Moller. Home is
+  jeffcalc.hp41.eu, not hp.giesselink.com as the original brief states.
+  (jeffcalc.hp41.eu, hpcalc.org)
+- Why third: proven HP-IL logic, but DOS heritage and no development since
+  2009. Most useful as a reference for HP-IL behaviour.
+- To verify: implementation language and how much is x86-specific. State
+  and location of Emu41gg.
+
+## What would change the ranking
+
+- V41 source proves unavailable, or the core cannot be separated from the
+  Windows UI at reasonable cost. Then B with HP-IL ported from A or C.
+- V41's HP-IL turns out to be a host-level shortcut and not register-level
+  module emulation. Then B or C.
+
+## Evaluation record
+
+| Check | V41 | Nonpareil | Emu41gg |
+| --- | --- | --- | --- |
+| Source obtained, version, licence text read | | | |
+| Core separable from UI | | | |
+| Builds on arm64 | | | |
+| Boots HP-41CX ROM | | | |
+| Loads a plug-in ROM | | | |
+| HP-IL module ROM runs | | | |
+| Talks to pyILPER | | | |
+
+## ROM images
+
+Emulators in this family expect user-supplied ROM images. None are
+committed here.

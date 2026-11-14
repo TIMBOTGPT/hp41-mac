@@ -1,0 +1,8 @@
+build/
+*.app/
+roms/*
+!roms/README.md
+xrom/build/
+.DS_Store
+__pycache__/
+*.o
