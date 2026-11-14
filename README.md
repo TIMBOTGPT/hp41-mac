@@ -7,9 +7,9 @@ Sister project to [emu71-mac](https://github.com/TIMBOTGPT/emu71-mac).
 
 ## Status
 
-A headless (command-line) build of the V41 emulation core runs on arm64 and
-passes 7 smoke tests against the HP-41CX ROM. There is no user interface yet,
-and Phase 1 is not complete. See docs/emulator-selection.md for exactly what
+The V41 emulation core runs on arm64 with an SDL2 window (`HP41.app`) and a
+headless command-line build. The headless build passes 7 smoke tests against
+the HP-41CX ROM, and state persists across runs. Phase 1 is not complete. See docs/emulator-selection.md for exactly what
 has and has not been verified.
 
 | Phase | Goal | State |
@@ -39,6 +39,22 @@ contributors), from which the emulation core is built.
 
     make            # needs the V41 R9O source at ~/Projects/hp41-upstream/v41r9o/src/V41R9
     tests/basic.sh  # or: make UPSTREAM=/path/to/V41R9
+    ./bundle.sh     # builds HP41.app (needs SDL2: brew install sdl2)
+
+## Running
+
+Put `NUT-CX.MOD` in `~/Library/Application Support/hp41-mac/MOD/`, then open
+`HP41.app`. State is saved on quit to `HP-41CX.lod` in the same folder, which
+also lists the modules to load (`$MODULE name` lines).
+
+Mac keyboard: digits, `Return` = ENTER, `- = ' /` = − + × ÷, `.`, `Backspace` = ←,
+`Shift` = gold shift key, letters = the key carrying that letter in ALPHA mode,
+`F2` or backtick = ON, `F3` USER, `F4` PRGM, `F5` or `Tab` ALPHA, `F6` SST,
+`F7` R/S, `F9` toggles turbo.
+
+Skins: `skin/hp41` is original artwork for this project. If a V41 source tree
+is present, `tools/v41_skin.py` builds a local skin from V41's own keyboard
+bitmap into `skin/local/` (not committed), and the app prefers it.
 
 The V41 source and its MOD (ROM) files are downloaded separately from
 hp.giesselink.com and are not part of this repository.

@@ -6,3 +6,5 @@ xrom/build/
 .DS_Store
 __pycache__/
 *.o
+skin/local/
+HP41.app/

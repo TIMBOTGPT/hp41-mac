@@ -149,3 +149,16 @@ Not done or not verified:
 - HP-IL transport is a stub. Nothing is sent or received.
 - Key hold time and run limits in the driver are fixed guesses that work for
   the tests above.
+
+## SDL2 front end (14 Nov 2026)
+
+- `build/hp41` and `HP41.app`: skin image, mouse and Mac keyboard input, LCD
+  drawn as 14-segment characters from the display registers, annunciators,
+  authentic speed (1e6/173 instructions per second) with a turbo toggle.
+- The timer module is advanced every 10 ms from the main loop.
+- State: `LoadConfig` on start and `SaveConfig` on quit, using V41's own `.lod`
+  format. Observed: `42 STO 05` in one process, `RCL 05` in a second process
+  shows `42.0000`.
+- Verified only by scripted screenshots reduced to text. Nobody has yet used
+  the window by hand. The 14-segment shapes are this project's own and have
+  not been compared with a real HP-41 display.
