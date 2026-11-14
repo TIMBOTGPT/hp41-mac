@@ -162,12 +162,12 @@ static void draw_char(float x, float y, float w, float h, const char *segs, SDL_
       case 'c': bar(R, MY + g, R, B - g, t, c); break;
       case 'g': bar(L + g, MY, MX - g * 0.5f, MY, t, c); break;
       case 'G': bar(MX + g * 0.5f, MY, R - g, MY, t, c); break;
-      case 'i': bar(MX, T + t * 0.62f, MX, MY - t * 0.55f, t * 0.9f, c); break;
-      case 'l': bar(MX, MY + t * 0.55f, MX, B - t * 0.62f, t * 0.9f, c); break;
-      case 'h': wedge(L + t * 0.80f, T + t * 0.85f, MX - t * 0.62f, MY - t * 0.62f, t * 1.0f, t * 0.45f, c); break;
-      case 'j': wedge(R - t * 0.80f, T + t * 0.85f, MX + t * 0.62f, MY - t * 0.62f, t * 1.0f, t * 0.45f, c); break;
-      case 'k': wedge(L + t * 0.80f, B - t * 0.85f, MX - t * 0.62f, MY + t * 0.62f, t * 1.0f, t * 0.45f, c); break;
-      case 'm': wedge(R - t * 0.80f, B - t * 0.85f, MX + t * 0.62f, MY + t * 0.62f, t * 1.0f, t * 0.45f, c); break;
+      case 'i': bar(MX, T + t * 0.62f, MX, MY - t * 0.55f, t * 1.1f, c); break;
+      case 'l': bar(MX, MY + t * 0.55f, MX, B - t * 0.62f, t * 1.1f, c); break;
+      case 'h': wedge(L + t * 0.80f, T + t * 0.85f, MX - t * 0.62f, MY - t * 0.62f, t * 1.3f, t * 0.70f, c); break;
+      case 'j': wedge(R - t * 0.80f, T + t * 0.85f, MX + t * 0.62f, MY - t * 0.62f, t * 1.3f, t * 0.70f, c); break;
+      case 'k': wedge(L + t * 0.80f, B - t * 0.85f, MX - t * 0.62f, MY + t * 0.62f, t * 1.3f, t * 0.70f, c); break;
+      case 'm': wedge(R - t * 0.80f, B - t * 0.85f, MX + t * 0.62f, MY + t * 0.62f, t * 1.3f, t * 0.70f, c); break;
       }
   g_shear = 0;
   }
