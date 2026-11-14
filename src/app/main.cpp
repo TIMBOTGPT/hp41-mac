@@ -105,23 +105,71 @@ static void fill(float x, float y, float w, float h, SDL_Color c)
   SDL_FRect r{x, y, w, h}; SDL_RenderFillRectF(ren, &r);
   }
 
+// Filled convex polygon, sheared to give the display its italic slant.
+static float g_shear_y = 0, g_shear = 0;
+static void poly(const SDL_FPoint *p, int n, SDL_Color c)
+  {
+  SDL_Vertex v[8]; int idx[18]; float cx = 0, cy = 0;
+  for (int i = 0; i < n; i++)
+    {
+    v[i + 1].position.x = p[i].x + (g_shear_y - p[i].y) * g_shear; v[i + 1].position.y = p[i].y;
+    v[i + 1].color = c; v[i + 1].tex_coord = SDL_FPoint{0, 0};
+    cx += v[i + 1].position.x; cy += v[i + 1].position.y;
+    }
+  v[0].position = SDL_FPoint{cx / n, cy / n}; v[0].color = c; v[0].tex_coord = SDL_FPoint{0, 0};
+  for (int i = 0; i < n; i++) { idx[i * 3] = 0; idx[i * 3 + 1] = i + 1; idx[i * 3 + 2] = (i + 1) % n + 1; }
+  SDL_RenderGeometry(ren, NULL, v, n + 1, idx, n * 3);
+  }
+
+// bar with pointed ends, as on the real display
+static void bar(float ax, float ay, float bx, float by, float t, SDL_Color c)
+  {
+  float dx = bx - ax, dy = by - ay, len = SDL_sqrtf(dx * dx + dy * dy);
+  if (len < t) return;
+  float ux = dx / len, uy = dy / len, nx = -uy * t / 2, ny = ux * t / 2, k = t / 2;
+  SDL_FPoint p[6] = {
+    {ax, ay}, {ax + ux * k + nx, ay + uy * k + ny}, {bx - ux * k + nx, by - uy * k + ny},
+    {bx, by}, {bx - ux * k - nx, by - uy * k - ny}, {ax + ux * k - nx, ay + uy * k - ny}};
+  poly(p, 6, c);
+  }
+
+// diagonal: wide at the outer end, narrowing toward the centre of the character
+static void wedge(float ox, float oy, float ix, float iy, float wo, float wi, SDL_Color c)
+  {
+  float dx = ix - ox, dy = iy - oy, len = SDL_sqrtf(dx * dx + dy * dy);
+  if (len < 0.5f) return;
+  float nx = -dy / len, ny = dx / len;
+  SDL_FPoint p[4] = {
+    {ox + nx * wo / 2, oy + ny * wo / 2}, {ix + nx * wi / 2, iy + ny * wi / 2},
+    {ix - nx * wi / 2, iy - ny * wi / 2}, {ox - nx * wo / 2, oy - ny * wo / 2}};
+  poly(p, 4, c);
+  }
+
 static void draw_char(float x, float y, float w, float h, const char *segs, SDL_Color c)
   {
-  static const struct { char id; float x1, y1, x2, y2; } S[] = {
-    {'a',0,0,1,0},{'b',1,0,1,.5f},{'c',1,.5f,1,1},{'d',0,1,1,1},{'e',0,.5f,0,1},{'f',0,0,0,.5f},
-    {'g',0,.5f,.5f,.5f},{'G',.5f,.5f,1,.5f},{'h',0,0,.5f,.5f},{'i',.5f,0,.5f,.5f},{'j',1,0,.5f,.5f},
-    {'k',.5f,.5f,0,1},{'l',.5f,.5f,.5f,1},{'m',.5f,.5f,1,1}};
-  float t = w * 0.13f; if (t < 1.2f) t = 1.2f;
+  float t = w * 0.20f; if (t < 1.6f) t = 1.6f;
+  float g = t * 0.14f;                         // gap left at each segment end
+  float L = x, R = x + w, T = y, B = y + h, MX = x + w / 2, MY = y + h / 2;
+  g_shear_y = MY; g_shear = 0.13f;
   for (const char *p = segs; *p; p++)
-    for (auto &s : S)
-      if (s.id == *p)
-        {
-        float ax = x + s.x1 * w, ay = y + s.y1 * h, bx = x + s.x2 * w, by = y + s.y2 * h;
-        float dx = bx - ax, dy = by - ay;          // pull the ends in a little so segments read separately
-        bool diag = dx != 0 && dy != 0;
-        float in = diag ? 0.16f : 0.07f;
-        thick_line(ax + dx * in, ay + dy * in, bx - dx * in, by - dy * in, diag ? t * 0.85f : t, c);
-        }
+    switch (*p)
+      {
+      case 'a': bar(L + g, T, R - g, T, t, c); break;
+      case 'd': bar(L + g, B, R - g, B, t, c); break;
+      case 'f': bar(L, T + g, L, MY - g, t, c); break;
+      case 'e': bar(L, MY + g, L, B - g, t, c); break;
+      case 'b': bar(R, T + g, R, MY - g, t, c); break;
+      case 'c': bar(R, MY + g, R, B - g, t, c); break;
+      case 'g': bar(L + g, MY, MX - g * 0.5f, MY, t, c); break;
+      case 'G': bar(MX + g * 0.5f, MY, R - g, MY, t, c); break;
+      case 'i': bar(MX, T + t * 0.62f, MX, MY - t * 0.55f, t * 0.9f, c); break;
+      case 'l': bar(MX, MY + t * 0.55f, MX, B - t * 0.62f, t * 0.9f, c); break;
+      case 'h': wedge(L + t * 0.80f, T + t * 0.85f, MX - t * 0.62f, MY - t * 0.62f, t * 1.0f, t * 0.45f, c); break;
+      case 'j': wedge(R - t * 0.80f, T + t * 0.85f, MX + t * 0.62f, MY - t * 0.62f, t * 1.0f, t * 0.45f, c); break;
+      case 'k': wedge(L + t * 0.80f, B - t * 0.85f, MX - t * 0.62f, MY + t * 0.62f, t * 1.0f, t * 0.45f, c); break;
+      case 'm': wedge(R - t * 0.80f, B - t * 0.85f, MX + t * 0.62f, MY + t * 0.62f, t * 1.0f, t * 0.45f, c); break;
+      }
+  g_shear = 0;
   }
 
 // 5x7 font for the annunciator row
@@ -143,7 +191,7 @@ static void draw_text5(float x, float y, float px, const char *s, SDL_Color c)
     const unsigned char *g = font5(*s); if (!g) continue;
     for (int r = 0; r < 7; r++)
       for (int b = 0; b < 5; b++)
-        if (g[r] & (16 >> b)) fill(x + b * px, y + r * px, px, px, c);
+        if (g[r] & (16 >> b)) fill(x + b * px, y + r * px, px * 1.25f, px * 1.05f, c);
     }
   }
 
@@ -151,23 +199,23 @@ static void draw_lcd()
   {
   fill(skin.lcd.x, skin.lcd.y, skin.lcd.w, skin.lcd.h, skin.bg);
   if (!hp->DisplayOn) return;
-  float cw = skin.cells.w / 12.0f, gw = cw * 0.60f, gh = skin.cells.h * 0.92f;
+  float cw = skin.cells.w / 12.0f, gw = cw * 0.56f, gh = skin.cells.h * 0.86f;
   float gy = skin.cells.y + (skin.cells.h - gh) / 2;
   for (int i = 0; i < 12; i++)
     {
     word lcdchar = (hp->DIS_C_REG[11 - i] << 8) | (hp->DIS_B_REG[11 - i] << 4) | hp->DIS_A_REG[11 - i];
     char ch, punct; unsigned short wch;
     decode_lcdchar(lcdchar, &ch, &wch, &punct);
-    float gx = skin.cells.x + i * cw + cw * 0.08f;
+    float gx = skin.cells.x + i * cw + cw * 0.14f;
     draw_char(gx, gy, gw, gh, glyph(wch), skin.fg);
-    float d = cw * 0.11f, px = gx + gw + cw * 0.10f;
+    float d = cw * 0.13f, px = gx + gw + cw * 0.12f;
     if (punct == '.' || punct == ',' || punct == ':') fill(px, gy + gh - d, d, d, skin.fg);
     if (punct == ':') fill(px, gy + gh * 0.55f, d, d, skin.fg);
     if (punct == ',') thick_line(px + d * 0.5f, gy + gh, px - d * 0.3f, gy + gh + d * 1.4f, d * 0.7f, skin.fg);
     }
   static const struct { const char *name; float at; } A[12] = {
-    {"BAT",0},{"USER",.10f},{"G",.235f},{"RAD",.27f},{"SHIFT",.38f},{"0",.53f},{"1",.565f},{"2",.60f},{"3",.635f},{"4",.67f},{"PRGM",.74f},{"ALPHA",.88f}};
-  float px = SDL_min(skin.annrow.h / 7.0f, skin.annrow.w / 300.0f);
+    {"BAT",0},{"USER",.10f},{"G",.235f},{"RAD",.27f},{"SHIFT",.38f},{"0",.53f},{"1",.565f},{"2",.60f},{"3",.635f},{"4",.67f},{"PRGM",.72f},{"ALPHA",.865f}};
+  float px = SDL_min(skin.annrow.h / 7.0f, skin.annrow.w / 225.0f);
   for (int i = 0; i < 12; i++)
     if (hp->DIS_ANNUN_REG & (0x800 >> i))
       draw_text5(skin.annrow.x + A[i].at * skin.annrow.w, skin.annrow.y + (skin.annrow.h - 7 * px) / 2, px, A[i].name, skin.fg);
