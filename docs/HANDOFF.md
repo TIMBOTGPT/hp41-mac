@@ -73,9 +73,9 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Phase 3, protocol and user-code XROM. Size the protocol from the
-   throughput above: short commands, drawing on the peripheral, no bulk
-   pixels from user code. The first XROM is FOCAL calling `OUTA`/`INA`
+1. Phase 3, protocol and user-code XROM. Settle the open points in
+   `docs/graphics-protocol.md` with the owner, then build the peripheral's
+   command decoder on `src/ildev` and the first user-code XROM. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).
@@ -92,6 +92,12 @@ Not done or not verified:
   peripheral with a display. MCU choice (RP2350 or ESP32) is open. No
   hardware code until the whole chain runs in simulation on the Mac.
 - The graphics peripheral must work standalone on the Mac.
+- Calculator side, in order: simulation on the Mac first, later a fast
+  emulated HP-41 (new CPU or FPGA). A real HP-41 stays supported.
+- Protocol (15 Nov 2026): two layers. A compact text command layer that a
+  stock HP-41 can use at about 200 bytes/s, and a binary bulk layer for
+  fast machines, announced in the capabilities. Draft:
+  `docs/graphics-protocol.md`, open points listed at its end.
 - Graphics resolution stays 480x320, 8-bit indexed, 16 or more screens.
 - The owner wants a visible replica to judge by hand, so the UI came before
   the remaining Phase 1 tests.
@@ -146,6 +152,10 @@ Not done or not verified:
   long (the test device is `ILTESTD`).
 - In `--keys`, numbers are separate digit keys (`2 0`, not `20`), and digits
   inside ALPHA need `SHIFT`.
+- `--speed N` runs the CPU N times faster than a real HP-41CX (emulated
+  time per instruction 173/N us, HP-IL pacing 180/N us). Throughput scales
+  almost linearly up to 200x on the virtual loop, which has no HP-IL chip
+  speed limit.
 - `--hpil HOST:OUT:IN` needs `HPIL.MOD` loaded. Tests use 61001/61000 so they
   do not collide with a pyILPER on 60001/60000.
 - Scripted keys hold each key for 3000 instructions, then run until the CPU

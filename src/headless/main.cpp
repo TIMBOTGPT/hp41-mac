@@ -2,7 +2,7 @@
 // Loads MOD files, runs the V41 Nut core, feeds scripted keys and prints
 // the display. Used for automated acceptance tests.
 //
-//   hp41-headless [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] --mod A.MOD [--mod B.MOD ...] [--keys "ON 2 ENTER 3 +"]
+//   hp41-headless [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] [--speed N] --mod A.MOD [--mod B.MOD ...] [--keys "ON 2 ENTER 3 +"]
 //   hp41-headless --modinfo A.MOD
 #include "StdAfx.h"
 #include "V41.h"
@@ -43,14 +43,19 @@ static std::string annunciators()
 // instruction cycle of a halfnut HP-41CX (173 us, DEFAULT_INST_SPEED in
 // HP41.h). The Time module is stepped every 10 ms of emulated time, as
 // V41's Windows multimedia timer would. Results do not depend on host speed.
-static uint64_t g_emu_us = 0;
-static DWORD emu_ms() { return (DWORD)(g_emu_us / 1000); }
+// --speed N runs a CPU N times faster than a real HP-41CX: each instruction
+// then stands for 173/N us, and HP-IL pacing is 180/N us per instruction.
+static double g_speed = 1.0;
+static uint64_t g_inst_ns = DEFAULT_INST_SPEED * 1000ULL;
+static uint64_t g_emu_ns = 0;
+#define g_emu_us (g_emu_ns / 1000)
+static DWORD emu_ms() { return (DWORD)(g_emu_ns / 1000000); }
 
 static void tick()
   {
-  uint64_t before = g_emu_us / 10000;
-  g_emu_us += DEFAULT_INST_SPEED;
-  if (g_emu_us / 10000 != before && hp->fTimer)
+  uint64_t before = g_emu_ns / 10000000;
+  g_emu_ns += g_inst_ns;
+  if (g_emu_ns / 10000000 != before && hp->fTimer)
     HP41::TimerProc(0, 0, (DWORD_PTR)hp, 0, 0);
   }
 
@@ -75,7 +80,7 @@ static void log_frame(char dir, WORD f)
   if (dir == '>') g_frames_out++; else g_frames_in++;
   if (g_ilog)
     {
-    fprintf(g_ilog, "%10.4f %10.3f %c %03X %s %02X\n", g_emu_us / 1e6, (host_ns() - g_t0_ns) / 1e6, dir, f & 0x7ff, frame_class(f), f & 0xff);
+    fprintf(g_ilog, "%12.6f %10.3f %c %03X %s %02X\n", g_emu_ns / 1e9, (host_ns() - g_t0_ns) / 1e6, dir, f & 0x7ff, frame_class(f), f & 0xff);
     fflush(g_ilog);
     }
   pthread_mutex_unlock(&g_ilog_mx);
@@ -92,7 +97,7 @@ static void pace_hpil()
   if (!hp->m_pHpil->IsFrameInTransfer(1)) { g_pace_ns = 0; return; }
   int64_t now = host_ns();
   if (g_pace_ns == 0 || g_pace_ns < now - 1000000) g_pace_ns = now;
-  g_pace_ns += 180000;
+  g_pace_ns += (int64_t)(180000 / g_speed);
   while (host_ns() < g_pace_ns) { }
   }
 
@@ -157,7 +162,7 @@ static bool press(const std::string &name)
   if (name.compare(0, 5, "WAIT:") == 0)   // let emulated time pass, CPU awake or asleep
     {
     double sec = atof(name.c_str() + 5);
-    run((uint64_t)(sec * 1e6 / DEFAULT_INST_SPEED), false);
+    run((uint64_t)(sec * 1e9 / g_inst_ns), false);
     printf("wait %.1f s -> [%-24s] ann[%s] (emulated time %.2f s)\n", sec, display().c_str(), annunciators().c_str(), g_emu_us / 1e6);
     return true;
     }
@@ -184,8 +189,14 @@ int main(int argc, char **argv)
     else if (a == "--hpil" && i + 1 < argc) hpil = argv[++i];
     else if (a == "--ilog" && i + 1 < argc) ilog = argv[++i];
     else if (a == "--displog") g_displog = true;
+    else if (a == "--speed" && i + 1 < argc)
+      {
+      g_speed = atof(argv[++i]);
+      if (g_speed < 1) { fprintf(stderr, "--speed must be 1 or more\n"); return 2; }
+      g_inst_ns = (uint64_t)(DEFAULT_INST_SPEED * 1000.0 / g_speed);
+      }
     else if (a == "--modinfo" && i + 1 < argc) return output_mod_info(stdout, argv[++i], 1, 1, NULL);
-    else { fprintf(stderr, "usage: %s [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] --mod FILE.MOD ... [--keys \"ON 2 ENTER 3 +\"]\n", argv[0]); return 2; }
+    else { fprintf(stderr, "usage: %s [--trace FILE] [--hpil HOST:OUT:IN] [--ilog FILE] [--displog] [--speed N] --mod FILE.MOD ... [--keys \"ON 2 ENTER 3 +\"]\n", argv[0]); return 2; }
     }
   if (mods.empty()) { fprintf(stderr, "no --mod given\n"); return 2; }
 

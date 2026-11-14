@@ -115,6 +115,18 @@ artificial delay to every frame at the device.
 | MANIO | 0 | 34.9 | 160.0 | 2.0 |
 | MANIO | 1 ms | 32.7 | 131.1 | 2.0 |
 
+Faster CPU (`--speed N`, `SPEED=N tools/hpil_throughput.sh 20`, no added
+delay). The virtual loop does not model the HP-IL chip's own speed, so the
+higher figures overstate what a real loop carries (about 7.1 kB/s with one
+device):
+
+| CPU speed | Sustained (LF to LF) | Inside one message |
+| --- | --- | --- |
+| 1x | 40.1 bytes/s | 160 bytes/s |
+| 10x | 386 bytes/s | 1.4 kB/s |
+| 50x | 1.8 kB/s | 5.9 kB/s |
+| 200x | 5.5 kB/s | 14.5 kB/s |
+
 Reading:
 
 - One 420 ms cycle, from the frame log: 255 ms running the eight FOCAL
@@ -132,8 +144,9 @@ Reading:
   latency adds about 1.6 times the per-frame delay per byte.
 - At these rates a full 480x320 8-bit screen (153,600 bytes) takes about
   64 minutes from FOCAL `OUTA` calls, or 16 minutes at the in-message rate.
-  The graphics protocol has to keep drawing on the peripheral and send
-  short commands, and bulk pixels cannot come from user code.
+  That holds for a stock HP-41 only. The protocol therefore has a compact
+  text layer for stock machines and a binary bulk layer for fast ones
+  (`docs/graphics-protocol.md`).
 
 Caveats: this is the emulator's timing model. It has not been compared with
 a real HP-41 and a real loop. The model counts V41's instruction cycle time
