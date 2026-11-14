@@ -117,9 +117,17 @@ artificial delay to every frame at the device.
 
 Reading:
 
-- Each `OUTA` call costs about 320 ms besides its bytes (FOCAL, re-addressing
-  the loop with AAU and AAD before every call in AUTOIO, LAD, UNL). That
-  overhead, not the loop, sets the sustained rate. MANIO does not help.
+- One 420 ms cycle, from the frame log: 255 ms running the eight FOCAL
+  steps between calls (about 32 ms per step), 15 ms re-addressing the loop
+  (IDY, AAU, AAD) and LAD, 51 ms inside `OUTA` before the first byte, and
+  100 ms for the 15 letters plus CR LF. So per call about 320 ms is
+  overhead, mostly the FOCAL interpreter. MANIO does not help.
+- Cross-check: the HP Journal (January 1983) gave 200 bytes/s for an
+  HP-41C as HP-IL controller and 7.1 kB/s as the 1LB3 chip's limit with one
+  device (as quoted in J-F Garnier's "How fast is HP-IL", 2016). The
+  emulator's 160 bytes/s inside a message is in that range. The HP-41 CPU,
+  about 5,800 instructions per second, is the bottleneck by a factor of
+  about 35.
 - Inside a message a byte costs 6.25 ms of CPU, about 36 instructions. Loop
   latency adds about 1.6 times the per-frame delay per byte.
 - At these rates a full 480x320 8-bit screen (153,600 bytes) takes about
