@@ -1,0 +1,108 @@
+# HP41GFX XROM
+
+User-code XROM v0 for the graphics peripheral. Source:
+`xrom/src/hp41gfx.focal`. Built by `tools/build_xrom.py`, tested by
+`tests/xrom.sh`. Last updated 15 November 2026.
+
+## Toolchain
+
+Not in this repository. Both tools are by Christophe Gottheimer, GPL v2,
+from the hp41.org library download
+(`~/Downloads/HP41-R3/Utilities/NUTASM-FOCALCOD`). They build unmodified
+on arm64 with the Xcode command line tools:
+
+    mkdir -p ~/Projects/hp41-upstream/toolchain && cd ~/Projects/hp41-upstream/toolchain
+    tar xzf ~/Downloads/HP41-R3/Utilities/NUTASM-FOCALCOD/asmnut-0.40.1_RELEASE.tgz
+    tar xzf ~/Downloads/HP41-R3/Utilities/NUTASM-FOCALCOD/focalcod-0.1.1_RELEASE.tgz
+    (cd asmnut && make) ; (cd focalcod && make)
+
+(tar reports "Failed to restore metadata" for a few files; the files are
+extracted correctly.)
+
+- `focalcod` 0.1.1 compiles FOCAL text and lists each line with its bytes.
+  It resolves XROM names from its database (`ILMODULE-1H.XRM` for the HP-IL
+  module, `XFUNS3-2D.XRM` for the CX Extended Functions).
+- `asmnut` 0.40.1 assembles the page: FAT, the MCODE header function, the
+  checksum, and writes the MOD file.
+- `tools/build_xrom.py` sits between them and lays the user code out in
+  ROM form (below). `focalcod` itself only writes RAM-form bytes.
+
+Build by hand:
+
+    python3 tools/build_xrom.py xrom/src/hp41gfx.focal xrom/build/HP41GFX.MOD \
+      --xrom 17 --header "-HP41GFX 0A" --title "HP41GFX graphics v0" \
+      --listing xrom/build/hp41gfx.lst
+
+## User code in ROM
+
+Established 15 November 2026 from a forum description and checked against
+HP's Math Pac and Stat Pac ROMs (local reads only, nothing committed):
+
+- One program byte per 10-bit word. Bit 8 set on the first byte of each line.
+- Before each chunk of programs (up to an END) two header words, used by
+  COPY: the number of 7-byte registers the chunk needs, then `2b0` where b
+  (1 to 7) is the number of bytes in the first register. Math Pac's first
+  chunk is 983 bytes = 7 x 140 + 3 and is preceded by `08D 230`.
+- The chunk ends with END, its third byte `20` with bit 9 set.
+- FAT entries for user code have bit 9 set (`200` plus the address) and
+  point at the global label.
+- Compiled jumps hold plain word distances, unlike RAM. Fitted to all 293
+  user-code jumps in the Math and Stat Pacs:
+  - long `GTO` (`Dx`) and `XEQ` (`Ex`), 3 words: distance v =
+    (low nibble of byte 1) << 8 | byte 2; byte 3 bit 7 set means toward
+    higher addresses; target = first word + 1 +/- v.
+  - short `GTO` (`B1` to `BF`), 2 words: v = byte 2 & 7F, bit 7 set means
+    higher; target = first word + 2 +/- v.
+- Uncompiled jumps do not work from ROM. The first build had them and the
+  HP-41 jumped into the wrong code.
+
+## Functions
+
+XROM 17 (provisional, not checked against other modules), header
+`-HP41GFX 0A`. Arguments follow keying order.
+
+| Function | Stack in | Sends | Stack out |
+| --- | --- | --- | --- |
+| `GRAPH` | none | `FINDID HP41GFX`, `SELECT`, `GI:C 0` | X Y Z kept, T lost |
+| `GCLEAR` | X: index | `C i` | unchanged |
+| `GCOLOR` | X: index | `K i` | unchanged |
+| `GTARG` | X: screen | `T n` | unchanged |
+| `GSHOW` | X: screen | `S n` | unchanged |
+| `GMOVE` | Y: x, X: y | `M x y` | unchanged |
+| `GDRAW` | Y: x, X: y | `D x y` | unchanged |
+| `GPLOT` | Y: x, X: y | `P x y` | unchanged |
+| `GSCALE` | T: xmin, Z: xmax, Y: ymin, X: ymax | `SX`, `SY` | unchanged |
+| `GPIXEL` | none | `SP` | unchanged |
+| `PSET` | Z: x, Y: y, X: index | `W x y i` | unchanged |
+| `PGET` | Y: x, X: y | `R x y`, `INA` | index in X, stack lifted |
+
+All functions overwrite ALPHA. `GRAPH` shows `NO HP41GFX` and stops if the
+peripheral is not on the loop. Coordinates are sent in FIX 4, integers in
+FIX 0 with flag 29 clear.
+
+Differences from what was agreed:
+
+- The functions do not restore the user's display format. They leave FIX 4
+  with flag 29 set (the HP-41 default). User code cannot save and restore
+  the format without disturbing the stack or synthetic tricks. The
+  microcode version should restore it.
+- `GTARGET` became `GTARG`: `focalcod` rejects seven-character labels.
+
+## Observed
+
+`tests/xrom.sh`, 9 checks pass: build, FAT names, checksum, `PSET` then
+`PGET` returns 5, and a keyed-in program of XROM calls draws axes and a sine
+curve. The peripheral receives the expected 73 lines, the image is pixel
+identical to the golden one, no errors. In program mode the steps display
+as `XROM "GDRAW"` and so on.
+
+At stock HP-41CX speed the drawing takes 96 s of emulated time: 7.2 s of
+setup, then 1.40 s per curve segment (a hand-written FOCAL program doing
+the same with `OUTA` takes 1.33 s per segment).
+
+## Not done or not verified
+
+- `COPY` of the XROM programs to RAM: the global label chain links are
+  left as `focalcod` writes them, not computed for the ROM.
+- ROM ID (`@@@@` now), XROM number conflict check, and a microcode XROM.
+- A real HP-41 has not run this ROM.

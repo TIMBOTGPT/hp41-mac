@@ -1,6 +1,6 @@
 # Graphics peripheral protocol, draft v0
 
-Status: draft for review, 15 November 2026. Nothing here is implemented yet.
+Status: v0, agreed and implemented 15 November 2026: peripheral (`src/gfx`), user-code XROM (`docs/xrom.md`). Layer 2 (binary bulk) is not implemented.
 Requirements come from `docs/original-brief-2026-11-14.md` sections 6 to 8.
 
 ## Decision this draft follows
@@ -34,7 +34,9 @@ real loop caps at about 7.1 kB/s with one device (HP Journal, 1983).
 Framing:
 
 - ASCII. A line ends with LF; CR is ignored. This is what `OUTA` sends.
-- One or more commands per line, separated by `;`. User code is limited to
+- One or more commands per line, separated by `:` (typable in ALPHA on the
+  HP-41 as the divide key; `;` is not on its keyboard). `;` is also
+  accepted, for host tools. User code is limited to
   24 characters per `OUTA` (the ALPHA register), so packing two short
   commands per line halves the per-call cost. The peripheral accepts lines
   of up to 255 bytes.
@@ -57,12 +59,13 @@ First command set, mapped to the brief's first XROM subset:
 | `GDRAW` | `D` | `x y` | line from the pen to x y, pen moves |
 | `GPLOT` | `P` | `x y` | set one pixel at x y in the pen colour, pen moves |
 | (pen colour) | `K` | `index` | pen colour for later drawing |
-| `GTARGET` | `T` | `n` | drawing target screen |
+| `GTARG` | `T` | `n` | drawing target screen |
 | `GSHOW` | `S` | `n` | displayed screen |
 | `PSET` | `W` | `x y index` | write one pixel |
 | `PGET` | `R` | `x y` | query: reply is the pixel's index, e.g. `17` |
 | `GSCALE` | `SC` | `xmin xmax ymin ymax` | later M D P use these user units; `SP` returns to pixels |
-| (capabilities) | `?` | none | query: reply e.g. `HP41GFX 0 480 320 16 256 B255` |
+| `GSCALE` (from user code) | `SX`, `SY` | `min max` | half of `SC` each, for the x or y axis, so each fits ALPHA |
+| (capabilities) | `?` | none | query: reply `version width height screens colours B<max block>`, e.g. `0 480 320 16 256 B0` (fits ALPHA) |
 | (last error) | `?E` | none | query: reply `0` or `E n text` |
 
 Coordinates: pixels, origin top left, x 0 to 479, y 0 to 319. With `SC`
@@ -72,11 +75,11 @@ clips at the screen edge. `PGET` outside the screen is an error.
 
 Example, stock HP-41, axes and a sine curve:
 
-    GI;C 0               clear
+    GI:C 0               clear
     SC -7 7 -1.2 1.2     user units
-    K 7;M -7 0;D 7 0     x axis
-    M 0 -1.2;D 0 1.2     y axis
-    K 2;M -6.3 0         start of curve
+    K 1:M -7 0:D 7 0     x axis
+    K 1:M 0 -1.2:D 0 1.2 y axis
+    K 2:M -6.3 0         start of curve
     D -6.2 0.083         one segment per D, two per line where they fit
 
 Rough cost on a stock HP-41: a 120-segment curve is about 60 to 120
@@ -100,14 +103,30 @@ From user code `INA` and `OUTA` cannot carry arbitrary bytes, so layer 2
 needs a microcode XROM or the Extended I/O module. That fits: layer 2 is
 for fast machines.
 
-## Open points for review
+## Decided 15 November 2026
 
-1. Mnemonics: one or two letters (as above) or short words (`DRAW`,
-   `MOVE`)? Words are easier to read in captures; letters halve the bytes.
-2. Silent success versus an acknowledgement per line. Silent is faster;
-   acknowledgements catch lost commands. HP-IL already detects frame errors.
-3. Origin top left (screen convention) or bottom left (plotter convention)
-   for pixel coordinates. `SC` makes this matter less.
-4. Whether the first XROM sets FIX and flag 29 itself before `ARCL`, or
-   leaves the display format to the user program.
-5. Accessory ID class for the peripheral.
+1. Mnemonics are one or two letters. The frame log tool will decode them
+   for readable captures.
+2. Commands are silent on success. Errors set the HP-IL status byte and are
+   read with `?E`.
+3. Pixel origin is top left, x right, y down. `SC` user units are y up.
+4. The XROM sets FIX and flag 29 itself before `ARCL`. It was to restore
+   them afterwards; the user-code XROM does not (see `docs/xrom.md`).
+5. Accessory ID: still open, until the HP-IL accessory class table has
+   been checked. 66 is a placeholder.
+
+Details fixed while implementing:
+
+- Errors, read by `?E` as `E n text`, cleared by reading:
+  1 unknown command, 2 wrong number of arguments, 3 bad number,
+  4 screen or colour out of range, 5 pixel outside the screen (`R`, `W`),
+  6 line too long, 7 bad scale (zero range).
+  The HP-IL status byte holds the last error number (0 = none).
+- An error stops the rest of that line. Earlier commands on the line stand.
+- Default palette: 0 black, 1 white, 2 red, 3 green, 4 blue, 5 yellow,
+  6 cyan, 7 magenta, 8 to 15 dark versions of 0 to 7 and grey, 16 to 231 a
+  6x6x6 colour cube, 232 to 255 a grey ramp.
+- Scaled coordinates round to the nearest pixel. Drawing outside the screen
+  is clipped silently. Only `R` and `W` report a pixel outside.
+- `GI` resets screens 0 to n-1 to index 0, all palettes to the default,
+  target and shown to 0, pen 1 at 0 0, pixel coordinates.

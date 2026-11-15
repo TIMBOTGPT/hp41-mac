@@ -1,0 +1,115 @@
+# Protocol v0, text layer: replies, errors, clipping, scaling, screens.
+# Run: build/hp41-gfx --script tests/gfx/v0.gfx
+GI
+?
+!reply 0 480 320 16 256 B0
+?E
+!reply 0
+
+# pixel write and read, bounds
+W 10 20 5
+!pixel 0 10 20 5
+R 10 20
+!reply 5
+R 479 319
+!reply 0
+R 480 0
+!err 5
+?E
+!reply E 5 OUTSIDE
+?E
+!reply 0
+W 0 0 256
+!err 4
+W 0 0 1.5
+!err 4
+X 1 2
+!err 1
+ABC
+!err 1
+M 1
+!err 2
+M 1 x
+!err 3
+M 1 2 3 4 5 6
+!err 2
+?E
+!reply E 2 ARG COUNT
+
+# lines, pen colour, clipping at the edge
+K 3;M 0 0;D 9 0
+!err 0
+!pixel 0 0 0 3
+!pixel 0 9 0 3
+!pixel 0 10 0 0
+K 4;M 100 100;D 110 110
+!pixel 0 105 105 4
+!pixel 0 105 106 0
+K 6;M 470 300;D 470 400
+!pixel 0 470 319 6
+K 2;M -5 50;D 5 50
+!pixel 0 0 50 2
+!pixel 0 5 50 2
+P 7 7
+!pixel 0 7 7 2
+
+# ARCL digit grouping: commas are ignored, so 1,0 is 10
+W 1,0 30 7
+!pixel 0 10 30 7
+
+# drawing target versus shown screen
+T 1;C 2;S 1
+!pixel 1 0 0 2
+!pixel 1 300 300 2
+!pixel 0 0 0 3
+R 0 0
+!reply 2
+T 16
+!err 4
+S 15
+!err 0
+T 15;W 1 1 9
+!pixel 15 1 1 9
+!pixel 0 1 1 0
+
+# an error stops the rest of the line; earlier commands stand
+T 0;W 200 201 8;X;W 200 200 9
+!err 1
+!pixel 0 200 201 8
+!pixel 0 200 200 0
+
+# scaled user units, y up
+GI
+SC -10 10 -10 10
+P 0 0
+!pixel 0 240 160 1
+P -10 10
+!pixel 0 0 0 1
+P 10 -10
+!pixel 0 479 319 1
+SC 1 1 0 1
+!err 7
+SP;P 5 5
+!pixel 0 5 5 1
+
+# empty commands are allowed
+;;
+!err 0
+
+# GI resets everything, including other screens
+T 3;C 9;GI
+!pixel 3 0 0 0
+!pixel 0 5 5 0
+GI
+W 1 1 5:W 2 2 6
+!pixel 0 1 1 5
+!pixel 0 2 2 6
+
+# SX and SY: SC in two halves
+GI
+SX -10 10
+SY -10 10
+P 0 0
+!pixel 0 240 160 1
+SX 5 5
+!err 7

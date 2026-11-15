@@ -12,6 +12,14 @@ void ildev_init(ildev *d, uint8_t aid, const char *did)
   if (did) strncpy(d->did, did, ILDEV_DIDLEN - 1);
   }
 
+void ildev_set_reply(ildev *d, const uint8_t *data, uint16_t len)
+  {
+  if (len > ILDEV_BUF) len = ILDEV_BUF;
+  if (len) memcpy(d->last, data, len);
+  d->last_len = len;
+  d->out_pos = 0;
+  }
+
 static void clear_device(ildev *d)
   {
   d->in_len = 0;
@@ -26,10 +34,11 @@ static void indata(ildev *d, uint16_t frame)
   if (d->in_len < ILDEV_BUF) d->in[d->in_len++] = b; else d->overflow++;
   if ((frame & 0x600) == IL_END || b == 0x0A)  /* END frame or LF ends a message */
     {
-    memcpy(d->last, d->in, d->in_len);
-    d->last_len = d->in_len;
+    uint16_t n = d->in_len;
     d->in_len = 0;
     d->messages++;
+    if (d->on_message) d->on_message(d->ctx, d, d->in, n);
+    else ildev_set_reply(d, d->in, n);           /* test device: echo */
     }
   }
 

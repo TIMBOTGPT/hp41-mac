@@ -12,9 +12,11 @@
  * Frames are 11 bits: C2 C1 C0 and an 8-bit data byte.
  *   0x000 DAB  0x200 END  0x400 CMD  0x500 RDY  0x600 IDY   (0x100 = SRQ)
  *
- * The test device: as listener it collects bytes into a message, ended by an
- * END frame or LF. As talker (SDA) it sends the last complete message back,
- * then EOT. So OUTA followed by INA on an HP-41 returns what was sent.
+ * As listener it collects bytes into a message, ended by an END frame or LF.
+ * A complete message goes to on_message if set; the application answers
+ * with ildev_set_reply. Without on_message the device echoes: the message
+ * becomes the reply, so OUTA followed by INA on an HP-41 returns what was
+ * sent. As talker (SDA) the device sends the reply as DAB frames, then EOT.
  */
 #ifndef ILDEV_H
 #define ILDEV_H
@@ -50,9 +52,13 @@ typedef struct ildev
   /* data */
   uint8_t in[ILDEV_BUF];     /* message being received */
   uint16_t in_len;
-  uint8_t last[ILDEV_BUF];   /* last complete message */
+  uint8_t last[ILDEV_BUF];   /* reply sent on SDA (the echo, or set by the application) */
   uint16_t last_len;
   uint16_t out_pos;          /* talker position in last[] */
+
+  /* application hook: a complete message arrived (LF or END included) */
+  void (*on_message)(void *ctx, struct ildev *d, const uint8_t *msg, uint16_t len);
+  void *ctx;
 
   /* counters */
   uint32_t frames, data_in, data_out, cmds, messages, overflow, talker_errors;
@@ -61,6 +67,8 @@ typedef struct ildev
 void ildev_init(ildev *d, uint8_t aid, const char *did);
 /* one frame from the previous device in, the frame for the next device out */
 uint16_t ildev_process(ildev *d, uint16_t frame);
+/* set the bytes the device sends when next made talker (SDA) */
+void ildev_set_reply(ildev *d, const uint8_t *data, uint16_t len);
 /* short mnemonic for logs, e.g. "LAD 1", "SDA", "DAB 41", "AAD 1" */
 const char *ildev_frame_name(uint16_t frame, char *buf, int n);
 

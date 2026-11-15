@@ -11,7 +11,7 @@ GENSRC := HP41GraphicsText MODFile
 HDRS := HP41.h HP41Hpil.h HP41HpilIf.h WFile.h Tcpip.h Udp.h
 OBJS := $(CORE:%=build/%.o) $(GENSRC:%=build/%.o) build/shim.o build/stubs.o build/tcpip.o build/main.o
 
-all: build/hp41-headless build/hp41 build/hp41-ildev
+all: build/hp41-headless build/hp41 build/hp41-ildev build/hp41-gfx
 
 $(GEN)/.stamp:
 	@test -d "$(V41)" || { echo "Upstream V41 source not found at $(V41)"; exit 1; }
@@ -47,6 +47,12 @@ build/hp41: $(COREOBJS) build/app.o
 build/hp41-ildev: src/ildev/ildev.c src/ildev/ildev.h src/ildev/main.c
 	mkdir -p build
 	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror src/ildev/ildev.c src/ildev/main.c -o $@
+
+# graphics peripheral: portable cores as strict C99, Mac wrapper with zlib for PNG
+build/hp41-gfx: src/gfx/gfx.c src/gfx/gfx.h src/gfx/main.c src/ildev/ildev.c src/ildev/ildev.h
+	mkdir -p build
+	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror -Isrc/ildev \
+	  src/gfx/gfx.c src/gfx/main.c src/ildev/ildev.c -o $@ -lz
 
 clean:
 	rm -rf build

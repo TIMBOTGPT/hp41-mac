@@ -6,6 +6,7 @@
 # and launches the SDL front end once with a hidden window.
 # Dependencies: Xcode command line tools (clang++), Homebrew sdl2, and the V41
 # R9O source tree (UPSTREAM, default ~/Projects/hp41-upstream/v41r9o/src/V41R9).
+# The XROM test also needs the focalcod/asmnut toolchain (docs/xrom.md).
 # usage: tests/clean_build.sh
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +22,7 @@ trap restore EXIT
 git clone -q "$REPO" "$WORK/src" || { echo "FAIL  clone"; exit 1; }
 echo "clean checkout of $(git -C "$WORK/src" rev-parse --short HEAD) in $WORK/src"
 if make -C "$WORK/src" UPSTREAM="$UPSTREAM" > "$WORK/make.log" 2>&1; then pass "make"; else bad "make (see below)"; tail -20 "$WORK/make.log"; exit 1; fi
-for b in hp41-headless hp41 hp41-ildev; do
+for b in hp41-headless hp41 hp41-ildev hp41-gfx; do
   a=$(lipo -archs "$WORK/src/build/$b")
   if [ "$a" = "arm64" ]; then pass "$b is $a only"; else bad "$b architectures [$a]"; fi
 done
@@ -29,6 +30,11 @@ sh "$WORK/src/tests/basic.sh"  "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/phase1.sh" "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/hpil.sh"   "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/ildev.sh"  "$UPSTREAM/MOD" || fail=1
+sh "$WORK/src/tests/gfx.sh" || fail=1
+sh "$WORK/src/tests/e2e_sine.sh" "$UPSTREAM/MOD" || fail=1
+if [ -x "$HOME/Projects/hp41-upstream/toolchain/focalcod/focalcod" ]; then
+  sh "$WORK/src/tests/xrom.sh" "$UPSTREAM/MOD" || fail=1
+else echo "SKIP  tests/xrom.sh: focalcod/asmnut toolchain not installed (docs/xrom.md)"; fi
 
 # launch the window build once; it saves state on exit, so keep the user's copy
 [ -f "$STATE" ] && cp "$STATE" "$WORK/state.bak"

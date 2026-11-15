@@ -12,7 +12,11 @@ headless command-line build. The six Phase 1 acceptance tests pass in the
 headless build (`tests/basic.sh`, `tests/phase1.sh`, `tests/clean_build.sh`),
 and the stock HP-IL module talks over a virtual loop to pyILPER and to this
 project's own portable C test device (`tests/hpil.sh`, `tests/ildev.sh`,
-[docs/hpil.md](docs/hpil.md), which also records the throughput measured). See docs/emulator-selection.md for exactly what
+[docs/hpil.md](docs/hpil.md), which also records the throughput measured).
+Phase 3 has started: a portable graphics peripheral core (`src/gfx`), a
+user-code XROM (`HP41GFX`, [docs/xrom.md](docs/xrom.md)) and the protocol
+([docs/graphics-protocol.md](docs/graphics-protocol.md)). An HP-41 program
+calling the XROM draws axes and a sine curve on the simulated peripheral. See docs/emulator-selection.md for exactly what
 has and has not been verified.
 
 | Phase | Goal | State |
@@ -20,7 +24,7 @@ has and has not been verified.
 | 0 | Inspect candidate engines, build one, choose with evidence | V41 R9O chosen on build evidence |
 | 1 | Working, stateful HP-41CX on arm64 that runs a stock XROM | acceptance tests pass (headless) |
 | 2 | Simulated HP-IL loop with a virtual test peripheral | loop, test device, error cases, replay and throughput done in emulation |
-| 3 | Graphics protocol and XROM | not started |
+| 3 | Graphics protocol and XROM | text protocol v0, peripheral core and user-code XROM working; bulk layer and microcode XROM to do |
 | 4 | 480x320 indexed-colour multi-screen peripheral on the Mac | not started |
 
 ## Documents
@@ -43,7 +47,9 @@ contributors), from which the emulation core is built.
 
     make            # needs the V41 R9O source at ~/Projects/hp41-upstream/v41r9o/src/V41R9
     tests/basic.sh  # or: make UPSTREAM=/path/to/V41R9
-    tests/phase1.sh tests/hpil.sh tests/ildev.sh tests/clean_build.sh
+    tests/phase1.sh tests/hpil.sh tests/ildev.sh tests/gfx.sh tests/e2e_sine.sh
+    tests/xrom.sh   # needs the focalcod/asmnut toolchain, see docs/xrom.md
+    tests/clean_build.sh
     tools/hpil_throughput.sh   # HP-IL throughput at authentic speed
     ./bundle.sh     # builds HP41.app (needs SDL2: brew install sdl2)
 

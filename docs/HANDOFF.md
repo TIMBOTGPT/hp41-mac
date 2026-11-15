@@ -14,6 +14,7 @@ Last updated 14 November 2026 (late evening). Read this first when resuming work
 | HP Museum DVD set (manuals, books) | `/Volumes/NAS RAID/12_Hobbies/COMPUTER HOBBY/HP Calc DVDs and Docs` |
 | HP internal documentation (HP-IL chip, Nut CPU, VASM listings) | `/Volumes/NAS RAID/12_Hobbies/HP DVDs and Docs/HP Stuff/Internal Documentation` |
 | Reference project | `~/Projects/emu71-mac` (do not edit from this project) |
+| focalcod 0.1.1 and asmnut 0.40.1 (XROM toolchain, GPL v2) | `~/Projects/hp41-upstream/toolchain` (build steps in `docs/xrom.md`) |
 | pyILPER 1.9.1 (own venv) | `~/Projects/hp41-upstream/pyilper-venv/bin/pyilper`; settings in `~/Library/Application Support/pyilper/pyilper2`, drive image `~/pyilper_test/disk1.dat` (use a copy for write tests) |
 
 The NAS folder `12_Hobbies/HP DVDs and Docs/HP41-DVD` is a mostly empty
@@ -54,6 +55,20 @@ Built and observed working:
     40 bytes/s, 160 bytes/s inside one message, CPU-bound below about 1 ms
     loop delay per frame. Emulator timing model only.
 
+- Phase 3 started (15 Nov 2026):
+  - Protocol v0 agreed and implemented, text layer only
+    (`docs/graphics-protocol.md`).
+  - `src/gfx`: portable C99 renderer and command parser (caller-provided
+    memory, configurable screens). `build/hp41-gfx` runs it standalone
+    (`--script`, golden tests in `tests/gfx/`, `tests/gfx.sh`) or as an
+    HP-IL device on `src/ildev` (`--out/--in`), and writes indexed PNGs.
+  - `tests/e2e_sine.sh` (3): keyed-in FOCAL with `OUTA` draws axes and a
+    sine curve, traffic equals the golden script, image hash matches.
+  - User-code XROM `HP41GFX` (XROM 17, 12 functions), built with
+    focalcod + asmnut + `tools/build_xrom.py` (`docs/xrom.md`).
+    `tests/xrom.sh` (9): a program of XROM calls draws the same image,
+    pixel identical; `PSET`/`PGET` round trip.
+
 Not done or not verified:
 
 - Program editing and SST/BST are not tested on their own.
@@ -73,9 +88,10 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Phase 3, protocol and user-code XROM. Settle the open points in
-   `docs/graphics-protocol.md` with the owner, then build the peripheral's
-   command decoder on `src/ildev` and the first user-code XROM. The first XROM is FOCAL calling `OUTA`/`INA`
+1. Phase 3, continued: the rest of the brief's command set (box, circle,
+   text, palette, roll, blit), then layer 2 (binary bulk) and a microcode
+   XROM that restores the display format and sends bulk data. A visible
+   window for `hp41-gfx` (SDL) so the owner can watch it draw. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).
@@ -148,6 +164,12 @@ Not done or not verified:
   CODE functions. Use it to choose a function for trace proofs.
 - `--displog` prints each display change. Needed for HP-IL functions such as
   `DIR` that show results briefly and return to X.
+- HP-41 ALPHA keys for punctuation: space is 0, `?` is 3, `:` is divide,
+  `,` is the decimal point key, `.` is shift decimal point, `-` is shift
+  minus. There is no `;`. `tools/alpha_keys.py` converts text to keys.
+- Uncompiled GTO/XEQ do not work from ROM; `tools/build_xrom.py` compiles
+  them with the distance rules in `docs/xrom.md`. asmnut drops a word that
+  follows a label on the same line inside `.UCODE`.
 - `FINDID` matches seven characters. Device IDs must be seven characters
   long (the test device is `ILTESTD`).
 - In `--keys`, numbers are separate digit keys (`2 0`, not `20`), and digits

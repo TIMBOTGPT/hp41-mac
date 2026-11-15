@@ -1,0 +1,113 @@
+; HP41GFX user-code XROM, v0 (protocol v0, docs/graphics-protocol.md).
+; Assembled by tools/build_xrom.py with focalcod and asmnut.
+;
+; Arguments follow keying order: x ENTER y GDRAW puts x in Y and y in X.
+; Every function except GRAPH expects GRAPH to have selected the peripheral.
+; ALPHA is used as the output buffer and is overwritten.
+; Functions leave the display format at FIX 4 with flag 29 set (the HP-41
+; default); user code cannot cheaply save and restore the user's format.
+;
+; GRAPH    find HP41GFX on the loop, select it, reset, clear screen 0
+; GCLEAR   X: colour index           clear the target screen
+; GCOLOR   X: colour index           pen colour
+; GTARG    X: screen                 drawing target
+; GSHOW    X: screen                 displayed screen
+; GMOVE    Y: x  X: y                move the pen
+; GDRAW    Y: x  X: y                line from the pen
+; GPLOT    Y: x  X: y                one pixel in the pen colour
+; GSCALE   T: xmin Z: xmax Y: ymin X: ymax   user units for GMOVE GDRAW GPLOT
+; GPIXEL   none                      back to pixel coordinates
+; PSET     Z: x  Y: y  X: index      write one pixel (pixel coordinates)
+; PGET     Y: x  X: y                read one pixel: index returned in X (stack lifts)
+ LBL "GRAPH"
+ "HP41GFX"
+ FINDID
+ X=0?
+ GTO 99
+ SELECT
+ RDN
+ "GI:C 0"
+ OUTA
+ GTO 91
+ LBL 99
+ "NO HP41GFX"
+ AVIEW
+ STOP
+ RTN
+ LBL "GCLEAR"
+ "C "
+ GTO 81
+ LBL "GCOLOR"
+ "K "
+ GTO 81
+ LBL "GTARG"
+ "T "
+ GTO 81
+ LBL "GSHOW"
+ "S "
+ LBL 81
+ XEQ 90
+ ARCL X
+ OUTA
+ GTO 91
+ LBL "GMOVE"
+ "M "
+ GTO 80
+ LBL "GDRAW"
+ "D "
+ GTO 80
+ LBL "GPLOT"
+ "P "
+ LBL 80
+ FIX 4
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
+ RTN
+ LBL "GSCALE"
+ FIX 4
+ "SX "
+ ARCL T
+ "` "
+ ARCL Z
+ OUTA
+ "SY "
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
+ RTN
+ LBL "GPIXEL"
+ "SP"
+ OUTA
+ RTN
+ LBL "PSET"
+ XEQ 90
+ "W "
+ ARCL Z
+ "` "
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
+ GTO 91
+ LBL "PGET"
+ XEQ 90
+ "R "
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
+ INA
+ ANUM
+ GTO 91
+ LBL 90
+ FIX 0
+ CF 29
+ RTN
+ LBL 91
+ FIX 4
+ SF 29
+ RTN
+ END
