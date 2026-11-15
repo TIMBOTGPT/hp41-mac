@@ -14,10 +14,15 @@
  *     --log writes every frame and every received line.
  * --png writes the displayed screen as an indexed-colour PNG on exit.
  * --hash 1 prints the displayed screen's FNV-1a 32 hash on exit.
+ * --window 1 [--scale N] shows the displayed screen live in a window. On the
+ *   loop it keeps accepting the calculator after a disconnect; quit by
+ *   closing the window. With --script it shows the result until closed.
  * GPL v2 or later.
  */
 #include "gfx.h"
 #include "ildev.h"
+#include "window.h"
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +36,8 @@
 
 static gfx G;
 static FILE *g_log;
+static pthread_mutex_t G_mx = PTHREAD_MUTEX_INITIALIZER;   /* guards G against the window thread */
+static volatile int g_done;
 
 static uint32_t fnv1a(const uint8_t *p, size_t n)
   {
@@ -104,8 +111,10 @@ static double now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, 
 static void on_message(void *ctx, ildev *d, const uint8_t *msg, uint16_t len)
   {
   (void)ctx;
+  pthread_mutex_lock(&G_mx);
   G.reply_len = 0; G.reply[0] = 0;
   int e = gfx_line(&G, (const char *)msg, len);
+  pthread_mutex_unlock(&G_mx);
   d->status = G.err;                               /* last error in the HP-IL status byte */
   if (G.reply_len)
     {
@@ -145,40 +154,52 @@ static int connect_to(int port)
   return -1;
   }
 
-static int run_loop(int out, int in, const char *did)
+static int run_loop(int out, int in, const char *did, int persist)
   {
-  ildev d; ildev_init(&d, 0x66, did);
-  d.on_message = on_message;
   int srv = listen_on(out);
   printf("hp41-gfx %s %ux%u, %u screens, listening on %d, replies to %d\n", did, G.w, G.h, G.nscreens, out, in); fflush(stdout);
-  int c = accept(srv, NULL, NULL), back = -1;
   t0 = now_ms();
-  for (;;)
+  uint32_t frames = 0;
+  do
     {
-    unsigned char b[2]; size_t have = 0;
-    while (have < 2) { ssize_t r = recv(c, b + have, 2 - have, 0); if (r <= 0) goto done; have += (size_t)r; }
-    uint16_t fin = (uint16_t)((b[0] << 8) | b[1]);
-    uint16_t fout = ildev_process(&d, fin);
-    if (g_log)
+    ildev d; ildev_init(&d, 0x66, did);            /* fresh HP-IL state per connection; the screens stay */
+    d.on_message = on_message;
+    int c = accept(srv, NULL, NULL), back = -1;
+    if (c < 0) break;
+    for (;;)
       {
-      char x[32], y[32];
-      fprintf(g_log, "%10.3f %03X %-8s -> %03X %s\n", now_ms() - t0, fin, ildev_frame_name(fin, x, 32), fout, ildev_frame_name(fout, y, 32));
+      unsigned char b[2]; size_t have = 0;
+      while (have < 2) { ssize_t r = recv(c, b + have, 2 - have, 0); if (r <= 0) goto closed; have += (size_t)r; }
+      uint16_t fin = (uint16_t)((b[0] << 8) | b[1]);
+      uint16_t fout = ildev_process(&d, fin);
+      if (g_log)
+        {
+        char x[32], y[32];
+        fprintf(g_log, "%10.3f %03X %-8s -> %03X %s\n", now_ms() - t0, fin, ildev_frame_name(fin, x, 32), fout, ildev_frame_name(fout, y, 32));
+        }
+      if (back < 0 && (back = connect_to(in)) < 0) { fprintf(stderr, "cannot reach calculator on %d\n", in); break; }
+      unsigned char o[2] = { (unsigned char)(fout >> 8), (unsigned char)fout };
+      if (send(back, o, 2, 0) != 2) break;
       }
-    if (back < 0 && (back = connect_to(in)) < 0) { fprintf(stderr, "cannot reach calculator on %d\n", in); break; }
-    unsigned char o[2] = { (unsigned char)(fout >> 8), (unsigned char)fout };
-    if (send(back, o, 2, 0) != 2) break;
+  closed:
+    frames += d.frames;
+    if (back >= 0) close(back);
+    close(c);
+    if (persist) { printf("calculator disconnected; waiting for the next connection\n"); fflush(stdout); }
     }
-done:
-  if (back >= 0) close(back);
-  close(c); close(srv);
-  printf("hp41-gfx: %u frames, %u lines, %u commands, last error %u, shown screen %u\n", d.frames, G.lines, G.commands, G.err, G.shown);
+  while (persist && !g_done);
+  close(srv);
+  printf("hp41-gfx: %u frames, %u lines, %u commands, last error %u, shown screen %u\n", frames, G.lines, G.commands, G.err, G.shown);
   return 0;
   }
+
+static int g_out, g_in; static const char *g_did;
+static void *loop_thread(void *arg) { (void)arg; run_loop(g_out, g_in, g_did, 1); return NULL; }
 
 int main(int argc, char **argv)
   {
   const char *script = NULL, *png = NULL, *logpath = NULL, *did = "HP41GFX";
-  int out = 60001, in = 60000, screens = 16, hash = 0;
+  int out = 60001, in = 60000, screens = 16, hash = 0, window = 0, scale = 2;
   for (int i = 1; i < argc; i += 2)
     {
     const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -191,13 +212,30 @@ int main(int argc, char **argv)
     else if (!strcmp(a, "--in")) in = atoi(v);
     else if (!strcmp(a, "--screens")) screens = atoi(v);
     else if (!strcmp(a, "--hash")) hash = atoi(v);
+    else if (!strcmp(a, "--window")) window = atoi(v);
+    else if (!strcmp(a, "--scale")) scale = atoi(v);
     else { fprintf(stderr, "unknown option %s\n", a); return 2; }
     }
   size_t need = gfx_mem_size(GFX_W_DEFAULT, GFX_H_DEFAULT, (uint16_t)screens);
   void *mem = malloc(need);                        /* the Mac host owns the memory; the core never allocates */
   if (gfx_init(&G, GFX_W_DEFAULT, GFX_H_DEFAULT, (uint16_t)screens, mem, need)) { fprintf(stderr, "gfx_init failed\n"); return 1; }
   if (logpath && !(g_log = fopen(logpath, "w"))) { perror(logpath); return 1; }
-  int rc = script ? run_script(script) : run_loop(out, in, did);
+  int rc = 0;
+  if (script)
+    {
+    rc = run_script(script);
+    if (window) gfx_window_run(&G, &G_mx, &g_done, scale, "HP41GFX");
+    }
+  else if (window)
+    {
+    /* the window owns the main thread (macOS); HP-IL runs beside it and accepts
+       the calculator again after it disconnects, so the app can be restarted */
+    g_out = out; g_in = in; g_did = did;
+    pthread_t th; pthread_create(&th, NULL, loop_thread, NULL); pthread_detach(th);
+    gfx_window_run(&G, &G_mx, &g_done, scale, "HP41GFX");
+    g_done = 1;
+    }
+  else rc = run_loop(out, in, did, 0);
   if (hash) printf("screen %u hash %08x\n", G.shown, fnv1a(gfx_screen(&G, G.shown), (size_t)G.w * G.h));
   if (png && write_png(png, G.shown) == 0) printf("wrote %s (screen %u)\n", png, G.shown);
   if (g_log) fclose(g_log);

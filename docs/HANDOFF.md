@@ -69,11 +69,20 @@ Built and observed working:
     `tests/xrom.sh` (9): a program of XROM calls draws the same image,
     pixel identical; `PSET`/`PGET` round trip.
 
+- Visible (15 Nov 2026): `hp41-gfx --window 1` shows the displayed screen
+  live (SDL, `src/gfx/window.c`; the cores stay strict C99) and keeps
+  accepting the calculator after it disconnects. `HP41.app` starts the
+  HP-IL loop when `HPIL.MOD` is loaded, with the same transfer pacing as the
+  headless build. `tools/setup_modules.sh` turns the app's MOD folder into
+  links (V41 MOD files plus `xrom/build/HP41GFX.MOD`) and adds modules to
+  the state file, keeping a `.before-` copy. Checked with `--state` on a
+  test file: R05 = 42 survived adding HPIL and HP41GFX, and `GRAPH`, `PSET`,
+  `PGET` through the app returned 5.
+
 Not done or not verified:
 
 - Program editing and SST/BST are not tested on their own.
 - Timer in `HP41.app` runs on host time and its accuracy is not checked.
-- HP-IL is headless only. `HP41.app` never calls `StartHpil`.
 - An unreachable loop partner is treated as a closed empty loop (V41
   design), not as the transmission error a real HP-41 would show.
 - A frame returned with the wrong class (LAD as DAB) and `OUTA` to an absent
@@ -90,8 +99,7 @@ Not done or not verified:
 
 1. Phase 3, continued: the rest of the brief's command set (box, circle,
    text, palette, roll, blit), then layer 2 (binary bulk) and a microcode
-   XROM that restores the display format and sends bulk data. A visible
-   window for `hp41-gfx` (SDL) so the owner can watch it draw. The first XROM is FOCAL calling `OUTA`/`INA`
+   XROM that restores the display format and sends bulk data. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).
@@ -189,4 +197,6 @@ Not done or not verified:
 - Skin PNGs are rendered from SVG with headless Chrome
   (`tools/render_skin.sh`). Layout files are plain text, 1x pixel units.
 - Screenshots for checking: `build/hp41 --keys "..." --screenshot out.bmp`.
-  This also saves state, so use `--fresh` or back up `HP-41CX.lod` first.
+  This also saves state: always add `--state /tmp/some.lod` so the owner's
+  `HP-41CX.lod` is not touched (it was overwritten once on 15 Nov and
+  restored from a backup).

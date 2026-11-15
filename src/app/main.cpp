@@ -7,6 +7,7 @@
 // saved on quit. ROM images (MOD files) are looked up in the MOD folder there.
 #include "StdAfx.h"
 #include "V41.h"
+#include "HP41Hpil.h"
 #include <SDL.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -280,6 +281,22 @@ static int map_key(SDL_Keycode k)
   return 0;
   }
 
+// While an HP-IL frame is in transit the CPU runs at authentic speed in real
+// time (180 us per instruction, as V41 does), so the HP-IL ROM's timeouts
+// match the loop's real latency. In turbo the pace is 50 times faster.
+static bool g_turbo = false;
+static Uint64 g_pace = 0;
+static void pace_hpil()
+  {
+  if (!hp->fHPIL || !hp->m_pTcpIp) return;
+  if (!hp->m_pHpil->IsFrameInTransfer(1)) { g_pace = 0; return; }
+  Uint64 f = SDL_GetPerformanceFrequency(), now = SDL_GetPerformanceCounter();
+  Uint64 step = f * 180 / 1000000 / (g_turbo ? 50 : 1);
+  if (g_pace == 0 || g_pace + f / 1000 < now) g_pace = now;
+  g_pace += step;
+  while (SDL_GetPerformanceCounter() < g_pace) { }
+  }
+
 static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
   {
   uint64_t n = 0;
@@ -287,6 +304,7 @@ static uint64_t run(uint64_t max_instr, bool stop_on_sleep)
   for (; n < max_instr; n++)
     {
     if (hp->IsSleeping()) { if (stop_on_sleep) break; continue; }
+    pace_hpil();
     hp->Execute();
     }
   return n;
@@ -298,7 +316,11 @@ static const std::map<std::string, int> &names()
     {"ON",0x18},{"USER",0xc6},{"PRGM",0xc5},{"ALPHA",0xc4},{"SIGMA+",0x10},{"1/X",0x30},{"SQRT",0x70},{"LOG",0x80},{"LN",0xc0},
     {"X<>Y",0x11},{"RDN",0x31},{"SIN",0x71},{"COS",0x81},{"TAN",0xc1},{"SHIFT",0x12},{"XEQ",0x32},{"STO",0x72},{"RCL",0x82},{"SST",0xc2},
     {"ENTER",0x13},{"CHS",0x73},{"EEX",0x83},{"BACK",0xc3},{"-",0x14},{"7",0x34},{"8",0x74},{"9",0x84},{"+",0x15},{"4",0x35},{"5",0x75},{"6",0x85},
-    {"*",0x16},{"1",0x36},{"2",0x76},{"3",0x86},{"/",0x17},{"0",0x37},{".",0x77},{"R/S",0x87}};
+    {"*",0x16},{"1",0x36},{"2",0x76},{"3",0x86},{"/",0x17},{"0",0x37},{".",0x77},{"R/S",0x87},
+    // ALPHA-mode letters share the keys above
+    {"A",0x10},{"B",0x30},{"C",0x70},{"D",0x80},{"E",0xc0},{"F",0x11},{"G",0x31},{"H",0x71},{"I",0x81},{"J",0xc1},
+    {"K",0x32},{"L",0x72},{"M",0x82},{"N",0x13},{"O",0x73},{"P",0x83},{"Q",0x14},{"R",0x34},{"S",0x74},{"T",0x84},
+    {"U",0x15},{"V",0x35},{"W",0x75},{"X",0x85},{"Y",0x16},{"Z",0x36}};
   return m;
   }
 
@@ -312,7 +334,7 @@ static std::string data_dir()
 
 int main(int argc, char **argv)
   {
-  std::string skinname, keys, shot; float scale = 0; bool fresh = false;
+  std::string skinname, keys, shot, statefile; float scale = 0; bool fresh = false;
   for (int i = 1; i < argc; i++)
     {
     std::string a = argv[i];
@@ -321,9 +343,10 @@ int main(int argc, char **argv)
     else if (a == "--keys" && i + 1 < argc) keys = argv[++i];
     else if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
     else if (a == "--fresh") fresh = true;
+    else if (a == "--state" && i + 1 < argc) statefile = argv[++i];   // another .lod, e.g. for tests
     else if (a == "--lcdtest") lcd_test = true;
     else if (a.rfind("-psn", 0) == 0) continue;   // passed by Finder on old systems
-    else { fprintf(stderr, "usage: hp41 [--skin NAME] [--scale N] [--keys \"...\"] [--screenshot FILE.bmp] [--fresh]\n"); return 2; }
+    else { fprintf(stderr, "usage: hp41 [--skin NAME] [--scale N] [--keys \"...\"] [--screenshot FILE.bmp] [--fresh] [--state FILE.lod]\n"); return 2; }
     }
 
   // locate resources: Contents/Resources in a bundle, else the repository root
@@ -357,7 +380,7 @@ int main(int argc, char **argv)
   SDL_RenderSetLogicalSize(ren, skin.faceW, skin.faceH);
 
   // emulator
-  std::string data = data_dir(), lod = data + "/HP-41CX.lod";
+  std::string data = data_dir(), lod = statefile.empty() ? data + "/HP-41CX.lod" : statefile;
   snprintf(theApp.szAppFullPath, sizeof(theApp.szAppFullPath), "%s/hp41", data.c_str());
   theApp.szSessionName[0] = 0;
   static CMainWindow wnd; theApp.pMainWnd = theApp.m_pMainWnd = &wnd;
@@ -374,6 +397,16 @@ int main(int argc, char **argv)
     fprintf(stderr, "%s\n", msg.c_str());
     if (shot.empty()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "HP-41CX", msg.c_str(), win);
     return 1;
+    }
+
+  // virtual HP-IL: started when HPIL.MOD is in the module list. The loop
+  // address and ports come from the $TCPIP line of the .lod file
+  // (default localhost, out 60001, in 60000).
+  if (hp->fHPIL)
+    {
+    hp->StartHpil();
+    fprintf(stderr, "HP-IL: %s, sending to %s:%u, listening on %u\n", hp->m_pTcpIp ? "virtual loop" : "not started",
+            (const char *)hp->strAddrOut, hp->wPortOut, hp->wPortIn);
     }
 
   // scripted keys (for tests and screenshots)
@@ -395,6 +428,7 @@ int main(int argc, char **argv)
     SDL_SaveBMP(s, shot.c_str());
     char d[64] = ""; hp->GetDisplay(d); printf("display: [%s]\n", d);
     hp->SaveConfig(lod.c_str(), TRUE);
+    if (hp->m_pTcpIp) hp->StopHpil();
     return 0;
     }
 
@@ -416,7 +450,7 @@ int main(int argc, char **argv)
       else if (e.type == SDL_KEYDOWN && !e.key.repeat)
         {
         if (e.key.keysym.sym == SDLK_F10) lcd_test = !lcd_test;
-        else if (e.key.keysym.sym == SDLK_F9) { turbo = !turbo; SDL_SetWindowTitle(win, turbo ? "HP-41CX (turbo)" : "HP-41CX"); }
+        else if (e.key.keysym.sym == SDLK_F9) { turbo = g_turbo = !turbo; SDL_SetWindowTitle(win, turbo ? "HP-41CX (turbo)" : "HP-41CX"); }
         else if (!(e.key.keysym.mod & KMOD_GUI)) key_down(map_key(e.key.keysym.sym));
         }
       else if (e.type == SDL_KEYUP) key_up(map_key(e.key.keysym.sym));
@@ -433,6 +467,7 @@ int main(int argc, char **argv)
     draw();
     }
   hp->SaveConfig(lod.c_str(), TRUE);
+  if (hp->m_pTcpIp) hp->StopHpil();
   SDL_Quit();
   return 0;
   }

@@ -64,6 +64,21 @@ Mac keyboard: digits, `Return` = ENTER, `- = ' /` = − + × ÷, `.`, `Backspace
 `F2` or backtick = ON, `F3` USER, `F4` PRGM, `F5` or `Tab` ALPHA, `F6` SST,
 `F7` R/S, `F9` toggles turbo.
 
+### HP-IL and the graphics peripheral
+
+`HP41.app` starts the virtual HP-IL loop when `HPIL.MOD` is in the module
+list (the `$TCPIP` line of the state file sets the address and ports,
+default localhost, out 60001, in 60000). To draw with the HP41GFX XROM:
+
+    make xrom                                       # needs the toolchain, docs/xrom.md
+    tools/setup_modules.sh --add HPIL --add HP41GFX # links MOD files, adds the modules
+    build/hp41-gfx --window 1 &                     # the peripheral, in its own window
+    open HP41.app
+
+Then on the calculator: `XEQ "GRAPH"`, and for example
+`100 ENTER 100 XEQ "GMOVE"`, `300 ENTER 200 XEQ "GDRAW"`.
+`build/hp41 --state FILE.lod` runs the app on another state file (tests).
+
 Skins: `skin/hp41` is original artwork for this project. If a V41 source tree
 is present, `tools/v41_skin.py` builds a local skin from V41's own keyboard
 bitmap into `skin/local/` (not committed), and the app prefers it.
