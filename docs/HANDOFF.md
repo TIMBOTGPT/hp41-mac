@@ -94,6 +94,14 @@ Built and observed working:
   fresh process identical; truncated, wrong magic, version or size refused
   with the screen untouched).
 
+- Layer 2 (15 Nov 2026): `BW`/`BR`/`BU` binary blocks up to 4096 bytes,
+  optional CRC-16, through `src/gfx/session.c` (portable byte-stream
+  framing; `ildev` has an `on_byte` hook and a 4352-byte reply buffer, and
+  its reply is now consumed across NRD). `tests/gfx/bulk.gfx` (28).
+  From a real HP-41 program with Extended I/O: `OUTXB` writes a block,
+  `INXB` reads one back (`tests/xrom.sh`, 15 checks). Baseline: 2.6
+  bytes/s at stock speed, 120 at 50x.
+
 Not done or not verified:
 
 - Program editing and SST/BST are not tested on their own.
@@ -112,9 +120,12 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Layer 2 (binary bulk: VWRITE/VREAD, RWRITE/RREAD, asset upload over
-   HP-IL) and a microcode XROM that restores the display format and sends
-   bulk data. Smaller: asset memory compaction on free, saving the asset
+1. Microcode XROM functions: a block sender (address once, stream bytes
+   from registers or extended memory, the per-byte cost of the HP-IL ROM
+   loop, expected about 150 to 200 bytes/s at stock speed) and display
+   format save/restore. Research first: HP-IL module entry points or
+   driving the HP-IL chip registers directly (docs in the hp41.org
+   Internal Documentation folder). Smaller: asset memory compaction on free, saving the asset
    store, palette import with images, dithering option. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
@@ -194,6 +205,8 @@ Not done or not verified:
 - Uncompiled GTO/XEQ do not work from ROM; `tools/build_xrom.py` compiles
   them with the distance rules in `docs/xrom.md`. asmnut drops a word that
   follows a label on the same line inside `.UCODE`.
+- After running an XROM program from the keyboard the program pointer is in
+  ROM, and PRGM shows `ROM`; key `GTO ..` before entering a program.
 - `FINDID` matches seven characters. Device IDs must be seven characters
   long (the test device is `ILTESTD`).
 - In `--keys`, numbers are separate digit keys (`2 0`, not `20`), and digits

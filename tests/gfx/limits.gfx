@@ -2,7 +2,7 @@
 # constrained configuration: only screens 0 and 1, and an asset pool too small for two 8x8 images
 GI
 ?
-!reply 0 480 320 2 256 B0
+!reply 0 480 320 2 256 B4096
 T 1
 !err 0
 T 2

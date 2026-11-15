@@ -31,7 +31,7 @@ session() { # name, keys
   "$B/hp41-gfx" --out 61001 --in 61000 --assets "$HERE/assets" --store "$TMP/store" --log "$TMP/$1.gfxlog" --png "$TMP/$1.png" --hash 1 > "$TMP/$1.gfxout" 2>&1 &
   dev=$!
   i=0; while ! grep -q listening "$TMP/$1.gfxout" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
-  "$B/hp41-headless" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --mod "$XR" --hpil localhost:61001:61000 \
+  "$B/hp41-headless" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" ${EXTRA:-} --mod "$XR" --hpil localhost:61001:61000 \
     --ilog "$TMP/$1.ilog" --keys "$2" > "$TMP/$1.calc"
   wait $dev
 }
@@ -88,4 +88,13 @@ printf 'GI:C 0\nK 7\nPV 100.0000 100.0000\nPV 200.0000 100.0000\nPV 150.0000 200
 cmp -s "$TMP/save.txt" "$TMP/save.exp" && pass "GVERT GPFILL GSAVE GGRID GAXES GPOLY GLOAD send the documented lines" || { bad "save session traffic:"; diff "$TMP/save.exp" "$TMP/save.txt"; }
 got=$(final "$TMP/save.calc")
 [ "$got" = " 7.0000" ] && pass "after GLOAD, PGET inside the saved triangle reads 7" || bad "PGET after GLOAD gave [$got]"
+
+# layer 2 from authentic HP-41 code: Extended I/O OUTXB sends raw bytes, INXB reads them
+A() { python3 "$R/tools/alpha_keys.py" "$1"; }
+EXTRA="--mod $MOD/EXT-IO.MOD" session bulk "ON $(F 'G R A P H') ALPHA $(A 'BW 10 10 2 1') ALPHA $(F 'O U T A') 5 $(F 'O U T X B') 7 $(F 'O U T X B') \
+1 0 $(F 'O U T X B') 1 1 ENTER 1 0 $(F 'P G E T') ALPHA $(A 'BR 10 10 2 1') ALPHA $(F 'O U T A') $(F 'I N X B') $(F 'I N X B') +"
+got=$(final "$TMP/bulk.calc")
+grep -q 'line \[BW 10 10 2 1\] -> ok' "$TMP/bulk.gfxlog" && grep -q 'reply 7' "$TMP/bulk.gfxlog" \
+  && pass "BW block sent with OUTXB (bytes 5 7 LF) written, PGET 11 10 reads 7" || bad "BW from OUTXB"
+[ "$got" = " 12.0000" ] && pass "BR read back with two INXB: 5 + 7 = 12" || bad "BR with INXB gave [$got]"
 exit $fail

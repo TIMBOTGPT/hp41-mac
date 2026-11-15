@@ -14,7 +14,7 @@ void ildev_init(ildev *d, uint8_t aid, const char *did)
 
 void ildev_set_reply(ildev *d, const uint8_t *data, uint16_t len)
   {
-  if (len > ILDEV_BUF) len = ILDEV_BUF;
+  if (len > ILDEV_REPLY) len = ILDEV_REPLY;
   if (len) memcpy(d->last, data, len);
   d->last_len = len;
   d->out_pos = 0;
@@ -31,6 +31,7 @@ static void indata(ildev *d, uint16_t frame)
   {
   uint8_t b = (uint8_t)frame;
   d->data_in++;
+  if (d->on_byte) { d->on_byte(d->ctx, d, b, (frame & 0x600) == IL_END); return; }
   if (d->in_len < ILDEV_BUF) d->in[d->in_len++] = b; else d->overflow++;
   if ((frame & 0x600) == IL_END || b == 0x0A)  /* END frame or LF ends a message */
     {
@@ -140,7 +141,8 @@ static uint16_t do_rdy(ildev *d, uint16_t frame)
       if (n == 66) { d->ptsdi = d->ptssi = 0; d->ilstate = 0x41; }       /* NRD */
       else if (n == 96)                                                  /* SDA */
         {
-        d->out_pos = 0;
+        /* the reply is consumed: a talker interrupted by NRD (a one-byte read)
+           continues where it stopped on the next SDA, like pyILPER's devices */
         if (d->last_len)                      /* with nothing to send, SDA passes on unchanged (pyILPER base device) */
           {
           frame = outdata(d);

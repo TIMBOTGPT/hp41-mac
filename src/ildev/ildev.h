@@ -17,12 +17,16 @@
  * with ildev_set_reply. Without on_message the device echoes: the message
  * becomes the reply, so OUTA followed by INA on an HP-41 returns what was
  * sent. As talker (SDA) the device sends the reply as DAB frames, then EOT.
+ * The reply is consumed: after NRD the next SDA continues where it stopped.
+ * With on_byte set instead, every data byte goes to the application as it
+ * arrives, for byte streams that may contain LF (binary blocks).
  */
 #ifndef ILDEV_H
 #define ILDEV_H
 #include <stdint.h>
 
-#define ILDEV_BUF    256     /* bytes per message buffer */
+#define ILDEV_BUF    256     /* bytes per received message */
+#define ILDEV_REPLY  4352    /* bytes the device can send as talker (a 4096-byte block and more) */
 #define ILDEV_DIDLEN 16
 
 #define IL_DAB 0x000
@@ -52,12 +56,16 @@ typedef struct ildev
   /* data */
   uint8_t in[ILDEV_BUF];     /* message being received */
   uint16_t in_len;
-  uint8_t last[ILDEV_BUF];   /* reply sent on SDA (the echo, or set by the application) */
+  uint8_t last[ILDEV_REPLY]; /* reply sent on SDA (the echo, or set by the application) */
   uint16_t last_len;
   uint16_t out_pos;          /* talker position in last[] */
 
   /* application hook: a complete message arrived (LF or END included) */
   void (*on_message)(void *ctx, struct ildev *d, const uint8_t *msg, uint16_t len);
+  /* alternative: every data byte as it arrives (end = it came in an END
+   * frame). When set, messages are not assembled and on_message is unused;
+   * the application frames the byte stream itself (binary blocks). */
+  void (*on_byte)(void *ctx, struct ildev *d, uint8_t b, int end);
   void *ctx;
 
   /* counters */

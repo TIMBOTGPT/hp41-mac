@@ -8,6 +8,8 @@
  *                  !pixel S X Y V screen S pixel X Y holds index V
  *                  !hash S HEX    FNV-1a 32 of screen S's indices is HEX
  *                  !shown N       the displayed screen is N
+ *                  !replyhex HEX  the last reply's bytes (first 64) in hex
+ *     !bin HEX sends raw bytes (binary block data) through the framing.
  *                  !print S       print screen S's hash (to make a golden)
  * On the virtual HP-IL loop:
  *   hp41-gfx [--out 60001] [--in 60000] [--log FILE] [--png OUT.png] [--screens N] [--did NAME]
@@ -29,6 +31,7 @@
 #include "ildev.h"
 #include "window.h"
 #include "assets.h"
+#include "session.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +45,7 @@
 #include <arpa/inet.h>
 
 static gfx G;
+static gfx_session S;
 static FILE *g_log;
 static pthread_mutex_t G_mx = PTHREAD_MUTEX_INITIALIZER;   /* guards G against the window thread */
 static volatile int g_done;
@@ -95,10 +99,34 @@ static int run_script(const char *path)
     size_t n = strlen(line);
     while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
     if (!n || line[0] == '#') continue;
-    if (line[0] != '!') { G.reply_len = 0; G.reply[0] = 0; last_err = gfx_line(&G, line, n); continue; }
+    if (line[0] != '!')                          /* a protocol line, through the same framing as HP-IL */
+      {
+      for (size_t k = 0; k < n; k++) gfx_session_byte(&S, (uint8_t)line[k], 0);
+      gfx_session_byte(&S, '\n', 0);
+      last_err = S.state == 1 ? 0 : S.last_err;
+      continue;
+      }
+    if (!strncmp(line, "!bin ", 5))              /* raw bytes in hex, e.g. block data */
+      {
+      S.block_err = 0;
+      for (const char *q = line + 5; q[0] && q[1]; )
+        {
+        if (*q == ' ') { q++; continue; }
+        unsigned v; if (sscanf(q, "%2x", &v) != 1) break;
+        gfx_session_byte(&S, (uint8_t)v, 0); q += 2;
+        }
+      last_err = S.block_err;
+      continue;
+      }
     int ok = 0; char what[160];
     unsigned s, x, y, v; unsigned long hx;
     if (!strncmp(line, "!reply ", 7)) { ok = !strcmp(G.reply, line + 7); snprintf(what, sizeof what, "reply [%s]", G.reply); }
+    else if (!strncmp(line, "!replyhex ", 10))
+      {
+      char hx[2 * 64 + 1] = ""; size_t m = S.outlen < 64 ? S.outlen : 64;
+      for (size_t k = 0; k < m; k++) sprintf(hx + 2 * k, "%02X", S.out[k]);
+      ok = !strcmp(hx, line + 10); snprintf(what, sizeof what, "reply %s", hx);
+      }
     else if (sscanf(line, "!err %u", &v) == 1) { ok = (int)v == last_err; snprintf(what, sizeof what, "error %d", last_err); }
     else if (sscanf(line, "!pixel %u %u %u %u", &s, &x, &y, &v) == 4) { int got = gfx_get(&G, (uint16_t)s, (int32_t)x, (int32_t)y); ok = got == (int)v; snprintf(what, sizeof what, "pixel %d", got); }
     else if (sscanf(line, "!hash %u %lx", &s, &hx) == 2) { uint32_t h = fnv1a(gfx_screen(&G, (uint16_t)s), (size_t)G.w * G.h); ok = h == (uint32_t)hx; snprintf(what, sizeof what, "hash %08x", h); }
@@ -116,26 +144,18 @@ static int run_script(const char *path)
 static double t0;
 static double now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6; }
 
-static void on_message(void *ctx, ildev *d, const uint8_t *msg, uint16_t len)
+static void on_byte(void *ctx, ildev *d, uint8_t b, int end)
   {
   (void)ctx;
   pthread_mutex_lock(&G_mx);
-  G.reply_len = 0; G.reply[0] = 0;
-  int e = gfx_line(&G, (const char *)msg, len);
-  pthread_mutex_unlock(&G_mx);
+  uint32_t lines = G.lines;
+  int changed = gfx_session_byte(&S, b, end);
   d->status = G.err;                               /* last error in the HP-IL status byte */
-  if (G.reply_len)
-    {
-    uint8_t r[GFX_REPLY + 2]; memcpy(r, G.reply, G.reply_len); r[G.reply_len] = '\r'; r[G.reply_len + 1] = '\n';
-    ildev_set_reply(d, r, (uint16_t)(G.reply_len + 2));
-    }
-  else ildev_set_reply(d, NULL, 0);
-  if (g_log)
-    {
-    int n = len; while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) n--;
-    fprintf(g_log, "%10.3f line [%.*s] -> %s%s%s\n", now_ms() - t0, n, (const char *)msg, e ? gfx_error_text(e) : "ok",
-            G.reply_len ? ", reply " : "", G.reply_len ? G.reply : "");
-    }
+  if (changed) ildev_set_reply(d, S.out, (uint16_t)S.outlen);
+  if (g_log && G.lines != lines)
+    fprintf(g_log, "%10.3f line [%.*s] -> %s%s%.*s\n", now_ms() - t0, S.lastlen, S.last, S.last_err ? gfx_error_text(S.last_err) : "ok",
+            G.reply_len ? ", reply " : "", (int)G.reply_len, G.reply);
+  pthread_mutex_unlock(&G_mx);
   }
 
 static int listen_on(int port)
@@ -171,7 +191,7 @@ static int run_loop(int out, int in, const char *did, int persist)
   do
     {
     ildev d; ildev_init(&d, 0x66, did);            /* fresh HP-IL state per connection; the screens stay */
-    d.on_message = on_message;
+    d.on_byte = on_byte;
     int c = accept(srv, NULL, NULL), back = -1;
     if (c < 0) break;
     for (;;)
@@ -239,6 +259,7 @@ int main(int argc, char **argv)
   static char defstore[1024];
   if (!storedir) { snprintf(defstore, sizeof defstore, "%s/Library/Application Support/hp41-mac/screens", getenv("HOME") ? getenv("HOME") : "."); storedir = defstore; }
   gfx_set_store(&G, gfx_host_write, gfx_host_read, (void *)storedir);
+  gfx_session_init(&S, &G);
   if (logpath && !(g_log = fopen(logpath, "w"))) { perror(logpath); return 1; }
   int rc = 0;
   if (script)

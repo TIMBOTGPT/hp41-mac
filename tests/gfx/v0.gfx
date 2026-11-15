@@ -2,7 +2,7 @@
 # Run: build/hp41-gfx --script tests/gfx/v0.gfx
 GI
 ?
-!reply 0 480 320 16 256 B0
+!reply 0 480 320 16 256 B4096
 ?E
 !reply 0
 

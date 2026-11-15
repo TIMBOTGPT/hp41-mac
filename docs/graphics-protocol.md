@@ -1,6 +1,6 @@
 # Graphics peripheral protocol, draft v0
 
-Status: v0, agreed and implemented 15 November 2026: peripheral (`src/gfx`), user-code XROM (`docs/xrom.md`). Layer 2 (binary bulk) is not implemented.
+Status: v0, agreed and implemented 15 November 2026: peripheral (`src/gfx`), user-code XROM (`docs/xrom.md`), layer 2 binary blocks (no microcode sender yet).
 Requirements come from `docs/original-brief-2026-11-14.md` sections 6 to 8.
 
 ## Decision this draft follows
@@ -90,7 +90,7 @@ First command set, mapped to the brief's first XROM subset:
 | `GPOLY` | `PO` | none | outline the closed polygon, then clear it |
 | `GAXES` | `AX` | `tx ty` | axes through the user origin, ticks every tx and ty (0 = none) |
 | `GGRID` | `GR` | `dx dy` | grid lines every dx and dy user units (0 = none) |
-| (capabilities) | `?` | none | query: reply `version width height screens colours B<max block>`, e.g. `0 480 320 16 256 B0` (fits ALPHA) |
+| (capabilities) | `?` | none | query: reply `version width height screens colours B<max block>`, e.g. `0 480 320 16 256 B4096` (fits ALPHA) |
 | (last error) | `?E` | none | query: reply `0` or `E n text` |
 
 Coordinates: pixels, origin top left, x 0 to 479, y 0 to 319. With `SC`
@@ -111,22 +111,40 @@ Rough cost on a stock HP-41: a 120-segment curve is about 60 to 120
 `OUTA` calls, about 25 to 50 s plus the time to compute the sines. At 50x
 it is about a second.
 
-## Layer 2: binary bulk (capability `B<n>`)
+## Layer 2: binary bulk (capability `B4096`, implemented 15 Nov 2026)
 
-- A text command announces a binary block, then exactly that many raw
-  bytes follow as data frames, length-counted, so LF inside the block is
-  data. Then a two-byte CRC-16 (CCITT), then LF.
-- `BW x y w h` then w*h index bytes: write a pixel rectangle on the target.
-- `BR x y w h`: query; the reply is w*h index bytes and the CRC, read as
-  binary by the calculator (not with `INA`).
-- `B<n>` in the capability reply is the largest block the peripheral
-  accepts in one command.
-- Sprite and image assets (load once, place many times) use the same
-  block mechanism. Details deferred to the asset design.
+- A text line announces a block. Exactly the announced number of bytes
+  follows as data frames, length-counted, so LF inside the block is data.
+  Then one LF. The block command must be the last command on its line.
+- `BW x y w h [c]`: w*h index bytes follow, written to the target
+  rectangle at x y (clipped), row by row.
+- `BR x y w h [c]`: query; the reply is w*h index bytes (and the CRC if
+  c is 1), read as bytes by the calculator. The rectangle must lie inside
+  the screen.
+- `BU id w h [c]`: w*h index bytes follow and become image asset id, every
+  pixel opaque (`BT` gives transparency when it is placed).
+- At most 4096 bytes per block (w*h). The peripheral collects a block in a
+  fixed buffer and applies it whole: a block with a bad CRC changes nothing.
+- c = 1: a CRC-16/CCITT-FALSE (polynomial 1021, initial FFFF) of the data
+  follows it, high byte first. c = 0 or absent: no CRC. Decided while
+  implementing: CRC is optional because HP-IL already checks every frame
+  (the sender compares each frame returning round the loop, and the tests
+  show corrupted frames ending in TRANSMIT ERR), and computing a CRC on a
+  stock HP-41 is costly. It matters for other transports.
+- If the byte after a block is not LF: error 14 (SYNC), and the peripheral
+  skips to the next LF.
+- Errors: 12 CRC mismatch, 13 block larger than 4096, 14 SYNC.
+- The HP-IL device consumes its reply: a read interrupted by NRD (for
+  example the Extended I/O module's `INXB`, one byte per call) continues
+  where it stopped on the next read.
 
-From user code `INA` and `OUTA` cannot carry arbitrary bytes, so layer 2
-needs a microcode XROM or the Extended I/O module. That fits: layer 2 is
-for fast machines.
+From user code `OUTA` and `INA` cannot carry arbitrary bytes. The Extended
+I/O module's `OUTXB` and `INXB` can, one byte per call, and the tests use
+them: a block written with `OUTXB` and read back with `INXB` from a real
+HP-41 program (`tests/xrom.sh`). That path is slow: 387 ms per byte at
+stock speed (2.6 bytes/s), 8.3 ms at 50x (120 bytes/s), because every call
+addresses the loop again. Practical bulk transfer needs a microcode sender
+that addresses once and streams the block.
 
 ## Decided 15 November 2026
 
@@ -147,7 +165,8 @@ Details fixed while implementing:
   4 screen or colour out of range, 5 pixel outside the screen (`R`, `W`),
   6 line too long, 7 bad scale (zero range), 8 no such image file,
   9 asset memory full, 10 no image in that slot, 11 saved screen damaged or
-  of another version or size.
+  of another version or size, 12 CRC mismatch, 13 block too large, 14 SYNC
+  (no LF after a block).
   The HP-IL status byte holds the last error number (0 = none).
 - An error stops the rest of that line. Earlier commands on the line stand.
 - Default palette: 0 black, 1 white, 2 red, 3 green, 4 blue, 5 yellow,

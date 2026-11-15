@@ -22,8 +22,11 @@
 enum gfx_error {
   GFX_OK = 0, GFX_E_UNKNOWN = 1, GFX_E_ARGS = 2, GFX_E_NUMBER = 3,
   GFX_E_RANGE = 4, GFX_E_OUTSIDE = 5, GFX_E_LONG = 6, GFX_E_SCALE = 7,
-  GFX_E_FILE = 8, GFX_E_MEMORY = 9, GFX_E_ASSET = 10, GFX_E_BADFILE = 11
+  GFX_E_FILE = 8, GFX_E_MEMORY = 9, GFX_E_ASSET = 10, GFX_E_BADFILE = 11,
+  GFX_E_CRC = 12, GFX_E_BLOCK = 13, GFX_E_SYNC = 14
 };
+
+#define GFX_BLOCK 4096           /* largest binary block (layer 2), bytes */
 
 #define GFX_POLY 64              /* polygon vertices */
 /* saved screen file, version 1, little endian:
@@ -71,6 +74,11 @@ typedef struct gfx
   /* polygon being built */
   int32_t polyx[GFX_POLY], polyy[GFX_POLY];
   uint8_t npoly;
+  /* binary block announced by BW, BR or BU (layer 2) */
+  uint8_t bulk_op;           /* 0 none, 'W' write rectangle, 'R' read rectangle, 'U' upload image */
+  uint8_t bulk_crc;          /* a CRC-16 follows the data */
+  uint8_t bulk_id;
+  int32_t bx, by, bw, bh;
   /* replies and errors */
   uint8_t err;               /* last error, cleared by ?E */
   char reply[GFX_REPLY];     /* reply to the last query */
@@ -97,6 +105,16 @@ void gfx_box(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int fill, u
 void gfx_circle(gfx *g, int32_t cx, int32_t cy, int32_t r, int fill, uint8_t index);
 void gfx_text(gfx *g, int32_t x, int32_t y, const char *s, size_t n, uint8_t index);
 void gfx_polygon(gfx *g, const int32_t *xs, const int32_t *ys, int n, int fill, uint8_t index);
+
+/* layer 2. After gfx_line, gfx_bulk_expect gives the number of bytes the
+ * caller must collect (data plus CRC) for a pending BW or BU, else 0;
+ * gfx_bulk_data then applies them whole or not at all. For a pending BR,
+ * gfx_bulk_read writes the reply bytes (data plus CRC) and returns their
+ * number. CRC: CRC-16/CCITT-FALSE (poly 1021, init FFFF), high byte first. */
+uint32_t gfx_bulk_expect(const gfx *g);
+int gfx_bulk_data(gfx *g, const uint8_t *buf, uint32_t n);
+uint32_t gfx_bulk_read(gfx *g, uint8_t *out);
+uint16_t gfx_crc16(const uint8_t *p, uint32_t n);
 int gfx_get(const gfx *g, uint16_t screen, int32_t x, int32_t y);  /* -1 outside */
 const uint8_t *gfx_screen(const gfx *g, uint16_t screen);
 const uint8_t *gfx_palette(const gfx *g, uint16_t screen);

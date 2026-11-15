@@ -71,7 +71,7 @@ void gfx_reset(gfx *g)
   g->pen = 1; g->px = g->py = 0;
   g->scaled = 0;
   g->xmin = 0; g->xmax = (float)(g->w - 1); g->ymin = 0; g->ymax = (float)(g->h - 1);
-  g->textscale = 1; g->transparent = -1; g->npoly = 0;
+  g->textscale = 1; g->transparent = -1; g->npoly = 0; g->bulk_op = 0;
   g->err = 0; g->reply_len = 0; g->reply[0] = 0;
   }
 
@@ -221,8 +221,8 @@ void gfx_polygon(gfx *g, const int32_t *xs, const int32_t *ys, int n, int fill, 
 const char *gfx_error_text(int e)
   {
   static const char *t[] = { "OK", "UNKNOWN CMD", "ARG COUNT", "BAD NUMBER", "RANGE", "OUTSIDE", "TOO LONG",
-                             "BAD SCALE", "NO FILE", "NO MEMORY", "NO ASSET", "BAD FILE" };
-  return (e >= 0 && e <= 11) ? t[e] : "?";
+                             "BAD SCALE", "NO FILE", "NO MEMORY", "NO ASSET", "BAD FILE", "CRC", "BLOCK", "SYNC" };
+  return (e >= 0 && e <= 14) ? t[e] : "?";
   }
 
 /* ---- screens and blits ---- */
@@ -325,6 +325,61 @@ static int screen_load(gfx *g, const char *name)
   return GFX_OK;
   }
 
+/* ---- layer 2: binary blocks ---- */
+
+uint16_t gfx_crc16(const uint8_t *p, uint32_t n)
+  {
+  uint16_t c = 0xFFFF;
+  while (n--)
+    {
+    c ^= (uint16_t)(*p++ << 8);
+    for (int i = 0; i < 8; i++) c = (uint16_t)(c & 0x8000 ? (c << 1) ^ 0x1021 : c << 1);
+    }
+  return c;
+  }
+
+uint32_t gfx_bulk_expect(const gfx *g)
+  {
+  if (g->bulk_op != 'W' && g->bulk_op != 'U') return 0;
+  return (uint32_t)(g->bw * g->bh) + (g->bulk_crc ? 2 : 0);
+  }
+
+int gfx_bulk_data(gfx *g, const uint8_t *buf, uint32_t n)
+  {
+  uint8_t op = g->bulk_op;
+  g->bulk_op = 0;
+  uint32_t np = (uint32_t)(g->bw * g->bh);
+  if ((op != 'W' && op != 'U') || n != np + (g->bulk_crc ? 2 : 0)) return GFX_E_SYNC;
+  if (g->bulk_crc && gfx_crc16(buf, np) != (uint16_t)(buf[np] << 8 | buf[np + 1])) return GFX_E_CRC;
+  if (op == 'W')
+    {
+    for (int32_t y = 0; y < g->bh; y++)
+      for (int32_t x = 0; x < g->bw; x++) gfx_plot(g, g->bx + x, g->by + y, buf[y * g->bw + x]);
+    return GFX_OK;
+    }
+  /* U: image from raw indices, every pixel opaque (BT gives transparency at placement) */
+  gfx_asset *a = &g->assets[g->bulk_id];
+  if (a->used) { if (a->off + (size_t)a->w * a->h + ((size_t)a->w * a->h + 7) / 8 == g->pooltop) g->pooltop = a->off; a->used = 0; }
+  size_t need = np + (np + 7) / 8;
+  if (g->pooltop + need > g->poolsize) return GFX_E_MEMORY;
+  memcpy(g->pool + g->pooltop, buf, np);
+  memset(g->pool + g->pooltop + np, 0xFF, (np + 7) / 8);
+  a->w = (uint16_t)g->bw; a->h = (uint16_t)g->bh; a->off = (uint32_t)g->pooltop; a->used = 1;
+  g->pooltop += need;
+  return GFX_OK;
+  }
+
+uint32_t gfx_bulk_read(gfx *g, uint8_t *out)
+  {
+  if (g->bulk_op != 'R') return 0;
+  g->bulk_op = 0;
+  uint32_t n = 0;
+  for (int32_t y = 0; y < g->bh; y++)
+    for (int32_t x = 0; x < g->bw; x++) out[n++] = (uint8_t)gfx_get(g, g->target, g->bx + x, g->by + y);
+  if (g->bulk_crc) { uint16_t c = gfx_crc16(out, n); out[n++] = (uint8_t)(c >> 8); out[n++] = (uint8_t)c; }
+  return n;
+  }
+
 /* ---- parser ---- */
 
 /* number: [-+]digits[.digits][E[-+]digits]; commas (ARCL digit grouping) skipped */
@@ -394,7 +449,7 @@ static int command(gfx *g, const char *c, size_t n)
   #define IS(s) (!strcmp(m, s))
   static const char *known[] = { "GI","C","K","T","S","M","D","P","W","R","SC","SX","SY","SP","?","?E",
                                  "B","BF","O","OF","L","LS","KP","?P","CS","SW","SN","BL","BC","BT",
-                                 "IL","IP","IF","?I","VS","VL","PV","PF","PO","AX","GR", NULL };
+                                 "IL","IP","IF","?I","VS","VL","PV","PF","PO","AX","GR","BW","BR","BU", NULL };
   int ok = 0;
   for (int q = 0; known[q]; q++) if (IS(known[q])) { ok = 1; break; }
   if (!ok) return GFX_E_UNKNOWN;
@@ -521,6 +576,23 @@ static int command(gfx *g, const char *c, size_t n)
     if (as_index(a[0], 255, &k)) return GFX_E_RANGE;
     g->transparent = (int16_t)k; return GFX_OK;
     }
+  if (IS("BW") || IS("BR") || IS("BU"))             /* layer 2: BW x y w h [c], BR x y w h [c], BU id w h [c] */
+    {
+    int up = IS("BU");
+    NEED(up ? 3 : 4, up ? 4 : 5);
+    int32_t v[5] = {0, 0, 0, 0, 0};
+    for (int q = 0; q < na; q++) { v[q] = iround(a[q]); if ((float)v[q] - a[q] > 0.001f || a[q] - (float)v[q] > 0.001f) return GFX_E_NUMBER; }
+    int c = na == (up ? 4 : 5) ? v[na - 1] : 0;
+    if (c != 0 && c != 1) return GFX_E_RANGE;
+    int32_t w = up ? v[1] : v[2], h = up ? v[2] : v[3];
+    if (w <= 0 || h <= 0) return GFX_E_RANGE;
+    if ((int64_t)w * h > GFX_BLOCK) return GFX_E_BLOCK;
+    if (up) { if (v[0] < 0 || v[0] >= GFX_ASSETS) return GFX_E_RANGE; g->bulk_id = (uint8_t)v[0]; g->bx = g->by = 0; }
+    else { g->bx = v[0]; g->by = v[1]; }
+    if (IS("BR") && (g->bx < 0 || g->by < 0 || g->bx + w > g->w || g->by + h > g->h)) return GFX_E_OUTSIDE;
+    g->bw = w; g->bh = h; g->bulk_crc = (uint8_t)c; g->bulk_op = (uint8_t)m[1];
+    return GFX_OK;
+    }
   if (IS("VS") || IS("VL")) { NEED(0, 0); return m[1] == 'S' ? screen_save(g, name) : screen_load(g, name); }
   if (IS("PV"))
     {
@@ -595,7 +667,7 @@ static int command(gfx *g, const char *c, size_t n)
   if (IS("?"))
     {
     NEED(0, 0);
-    char b[GFX_REPLY]; snprintf(b, sizeof b, "0 %u %u %u 256 B0", g->w, g->h, g->nscreens);   /* fits ALPHA (24) */
+    char b[GFX_REPLY]; snprintf(b, sizeof b, "0 %u %u %u 256 B%u", g->w, g->h, g->nscreens, (unsigned)GFX_BLOCK);   /* fits ALPHA (24) */
     reply(g, b); return GFX_OK;
     }
   /* ?E */
@@ -622,6 +694,7 @@ int gfx_line(gfx *g, const char *line, size_t len)
     if (i == len || line[i] == ':' || line[i] == ';')    /* ':' is typable on the HP-41 */
       {
       int e = command(g, line + s, i - s);
+      if (!e && g->bulk_op && i < len) { g->bulk_op = 0; e = GFX_E_ARGS; }   /* BW BR BU end their line */
       if (e) { g->err = (uint8_t)e; return e; }
       s = i + 1;
       }

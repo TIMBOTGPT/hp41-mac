@@ -1,0 +1,58 @@
+# layer 2: binary blocks (BW write, BR read, BU upload), optional CRC-16/CCITT-FALSE
+GI
+?
+!reply 0 480 320 16 256 B4096
+# 4x2 block, with LF (0A) bytes inside the data and the closing LF after it
+BW 10 10 4 2
+!bin 01 02 0A 04 05 06 07 08 0A
+!err 0
+!pixel 0 10 10 1
+!pixel 0 12 10 10
+!pixel 0 13 11 8
+BR 10 10 4 2
+!replyhex 01020A0405060708
+BR 10 10 4 2 1
+!replyhex 01020A04050607080F70
+# with a CRC: a good one writes, a bad one writes nothing
+BW 20 20 2 1 1
+!bin 05 07 92 1D 0A
+!err 0
+!pixel 0 20 20 5
+!pixel 0 21 20 7
+BW 30 30 2 1 1
+!bin 05 07 92 1E 0A
+!err 12
+!pixel 0 30 30 0
+# limits and framing errors
+BW 0 0 65 64
+!err 13
+BW 0 0 0 4
+!err 4
+BW 0 0 1 1 2
+!err 4
+BR 478 0 4 1
+!err 5
+BW 0 0 1 1:K 2
+!err 2
+# a missing LF after the block: SYNC, then skip to the next LF; later lines work
+BW 40 40 1 1
+!bin 05 41 42 0A
+!err 14
+!pixel 0 40 40 5
+W 3 3 9
+!err 0
+!pixel 0 3 3 9
+# upload an image as raw indices (all opaque), place it, read it back
+BU 0 2 2
+!bin 0B 0C 0D 0E 0A
+!err 0
+?I 0
+!reply 2 2
+IP 0 100 100
+!pixel 0 100 100 11
+!pixel 0 101 101 14
+BT 12:IP 0 200 200:BT
+!pixel 0 201 200 0
+!pixel 0 200 200 11
+BU 32 1 1
+!err 4
