@@ -83,6 +83,13 @@ First command set, mapped to the brief's first XROM subset:
 | `GSPRAY` | `IP` | `id x y` | place asset id with its top left at x y on the target |
 | (free image) | `IF` | `id` | free asset slot id |
 | (image size) | `?I` | `id` | query: reply `w h` |
+| `GSAVE` | `VS` | `name` | save the target screen (palette and pixels) as NAME |
+| `GLOAD` | `VL` | `name` | load screen NAME into the target |
+| `GVERT` | `PV` | `x y` | add a polygon vertex (up to 64; kept across lines) |
+| `GPFILL` | `PF` | none | fill and outline the polygon in the pen colour, then clear it |
+| `GPOLY` | `PO` | none | outline the closed polygon, then clear it |
+| `GAXES` | `AX` | `tx ty` | axes through the user origin, ticks every tx and ty (0 = none) |
+| `GGRID` | `GR` | `dx dy` | grid lines every dx and dy user units (0 = none) |
 | (capabilities) | `?` | none | query: reply `version width height screens colours B<max block>`, e.g. `0 480 320 16 256 B0` (fits ALPHA) |
 | (last error) | `?E` | none | query: reply `0` or `E n text` |
 
@@ -139,7 +146,8 @@ Details fixed while implementing:
   1 unknown command, 2 wrong number of arguments, 3 bad number,
   4 screen or colour out of range, 5 pixel outside the screen (`R`, `W`),
   6 line too long, 7 bad scale (zero range), 8 no such image file,
-  9 asset memory full, 10 no image in that slot.
+  9 asset memory full, 10 no image in that slot, 11 saved screen damaged or
+  of another version or size.
   The HP-IL status byte holds the last error number (0 = none).
 - An error stops the rest of that line. Earlier commands on the line stand.
 - Default palette: 0 black, 1 white, 2 red, 3 green, 4 blue, 5 yellow,
@@ -156,6 +164,13 @@ Details fixed while implementing:
   is transparent. Images are stored once and can be placed on any screen
   any number of times. In v0 freeing only reclaims memory when the freed
   image was the last loaded.
+- Saved screens (`VS`, `VL`), file version 1, little endian: `H41G`,
+  version byte 1, flags byte 0 (raw indices), width and height (16 bits
+  each), 2 reserved bytes, then the 256 x RGB palette, then width x height
+  indices row by row: 154,380 bytes at 480 x 320. The host stores them
+  (Mac: `NAME.h41g` in the screens folder, `--store DIR`), written whole or
+  not at all. `VL` checks magic, version, flags, size and length before it
+  changes the target screen. Images are not saved: they reload by name.
 - Copy policies between screens with different palettes: `BL` and `CS`
   copy indices (the colours follow the target palette); `BC` keeps the
   appearance by mapping each colour to the target palette's nearest entry.

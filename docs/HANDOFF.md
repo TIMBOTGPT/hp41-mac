@@ -87,6 +87,13 @@ Built and observed working:
   Golden scripts: `tests/gfx/v1.gfx`, `screens16.gfx` (16 screens keep
   their own content and palette), `limits.gfx` (2 screens, tiny asset pool).
 
+- Saved screens (`VS`/`VL`, versioned `H41G` file, host hooks, written
+  whole or not at all), filled and outline polygons, axes with ticks and
+  grids; XROM 28 functions (new ones appended: FAT order is fixed).
+  `tests/gfx/v2.gfx` (33), `tests/persist.sh` (7: save, quit, load in a
+  fresh process identical; truncated, wrong magic, version or size refused
+  with the screen untouched).
+
 Not done or not verified:
 
 - Program editing and SST/BST are not tested on their own.
@@ -105,10 +112,10 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Graphics, remaining: saving and restoring screens and assets (versioned
-   file format), filled polygons, grid and axes helpers, then layer 2
-   (binary bulk: VWRITE/VREAD, RWRITE/RREAD, asset upload) and a microcode
-   XROM that restores the display format and sends bulk data. The first XROM is FOCAL calling `OUTA`/`INA`
+1. Layer 2 (binary bulk: VWRITE/VREAD, RWRITE/RREAD, asset upload over
+   HP-IL) and a microcode XROM that restores the display format and sends
+   bulk data. Smaller: asset memory compaction on free, saving the asset
+   store, palette import with images, dithering option. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
    (DOS, would need DOSBox, produces `.ROM` not `.MOD`).

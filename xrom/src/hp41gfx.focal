@@ -1,4 +1,6 @@
 ; HP41GFX user-code XROM, v0 (protocol v0, docs/graphics-protocol.md).
+; The FAT follows the order of the global labels below. Add new functions at
+; the end only: reordering renumbers XROM 17,nn and breaks keyed programs.
 ; Assembled by tools/build_xrom.py with focalcod and asmnut.
 ;
 ; Arguments follow keying order: x ENTER y GDRAW puts x in Y and y in X.
@@ -28,6 +30,13 @@
 ; GNEXT    none                      show the next screen
 ; GIMAGE   ALPHA: name  X: id        load image NAME into asset slot id; T is lost
 ; GSPRAY   Z: id  Y: x  X: y         place asset id with its top left at x y
+; GSAVE    ALPHA: name               save the target screen as NAME; T is lost
+; GLOAD    ALPHA: name               load screen NAME into the target; T is lost
+; GAXES    Y: x tick  X: y tick      axes through the origin, ticks every x, y (0 = none)
+; GGRID    Y: dx  X: dy              grid lines every dx, dy (0 = none in that direction)
+; GVERT    Y: x  X: y                add a polygon vertex
+; GPFILL   none                      fill and outline the polygon, then clear it
+; GPOLY    none                      outline the closed polygon, then clear it
  LBL "GRAPH"
  "HP41GFX"
  FINDID
@@ -130,10 +139,7 @@
  LBL "GTEXT"
  "`L "
  -2
- AROT
- RDN
- OUTA
- RTN
+ GTO 83
  LBL "GPAL"
  XEQ 90
  "KP "
@@ -171,6 +177,35 @@
  ARCL X
  OUTA
  GTO 91
+ LBL "GSAVE"
+ "`VS "
+ -3
+ GTO 83
+ LBL "GLOAD"
+ "`VL "
+ -3
+ LBL 83
+ AROT
+ RDN
+ OUTA
+ RTN
+ LBL "GAXES"
+ "AX "
+ GTO 80
+ LBL "GGRID"
+ "GR "
+ GTO 80
+ LBL "GVERT"
+ "PV "
+ GTO 80
+ LBL "GPFILL"
+ "PF"
+ OUTA
+ RTN
+ LBL "GPOLY"
+ "PO"
+ OUTA
+ RTN
  LBL 90
  FIX 0
  CF 29

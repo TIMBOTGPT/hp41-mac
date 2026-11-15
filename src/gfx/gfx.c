@@ -71,7 +71,7 @@ void gfx_reset(gfx *g)
   g->pen = 1; g->px = g->py = 0;
   g->scaled = 0;
   g->xmin = 0; g->xmax = (float)(g->w - 1); g->ymin = 0; g->ymax = (float)(g->h - 1);
-  g->textscale = 1; g->transparent = -1;
+  g->textscale = 1; g->transparent = -1; g->npoly = 0;
   g->err = 0; g->reply_len = 0; g->reply[0] = 0;
   }
 
@@ -84,6 +84,11 @@ int gfx_init(gfx *g, uint16_t w, uint16_t h, uint16_t n, void *mem, size_t memsi
   g->pal = g->pix + (size_t)n * w * h;
   gfx_reset(g);
   return 0;
+  }
+
+void gfx_set_store(gfx *g, gfx_write_fn write, gfx_read_fn read, void *ctx)
+  {
+  g->store_write = write; g->store_read = read; g->store_ctx = ctx;
   }
 
 void gfx_set_assets(gfx *g, void *pool, size_t size, gfx_load_fn load, void *ctx)
@@ -178,11 +183,46 @@ void gfx_text(gfx *g, int32_t x, int32_t y, const char *str, size_t n, uint8_t c
     }
   }
 
+/* integer division rounding half away from zero */
+static int32_t div_round(int64_t num, int64_t den)
+  {
+  if (den < 0) { num = -num; den = -den; }
+  return (int32_t)(num >= 0 ? (num + den / 2) / den : -((-num + den / 2) / den));
+  }
+
+/* polygon: scanline fill (even-odd), then the outline; after emu71-mac's polypx */
+void gfx_polygon(gfx *g, const int32_t *xs, const int32_t *ys, int n, int fill, uint8_t c)
+  {
+  if (n < 2) return;
+  if (fill && n >= 3)
+    {
+    int32_t ymin = ys[0], ymax = ys[0];
+    for (int i = 1; i < n; i++) { if (ys[i] < ymin) ymin = ys[i]; if (ys[i] > ymax) ymax = ys[i]; }
+    if (ymin < 0) ymin = 0;
+    if (ymax >= g->h) ymax = g->h - 1;
+    for (int32_t y = ymin; y <= ymax; y++)
+      {
+      int32_t cx[GFX_POLY]; int k = 0;
+      for (int i = 0; i < n; i++)
+        {
+        int32_t x0 = xs[i], y0 = ys[i], x1 = xs[(i + 1) % n], y1 = ys[(i + 1) % n];
+        if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y))
+          {
+          cx[k++] = x0 + div_round((int64_t)(y - y0) * (x1 - x0), (int64_t)(y1 - y0));
+          }
+        }
+      for (int i = 1; i < k; i++) { int32_t t = cx[i]; int j = i - 1; while (j >= 0 && cx[j] > t) { cx[j + 1] = cx[j]; j--; } cx[j + 1] = t; }
+      for (int i = 0; i + 1 < k; i += 2) hline(g, cx[i], cx[i + 1], y, c);
+      }
+    }
+  for (int i = 0; i < n; i++) gfx_drawline(g, xs[i], ys[i], xs[(i + 1) % n], ys[(i + 1) % n], c);
+  }
+
 const char *gfx_error_text(int e)
   {
   static const char *t[] = { "OK", "UNKNOWN CMD", "ARG COUNT", "BAD NUMBER", "RANGE", "OUTSIDE", "TOO LONG",
-                             "BAD SCALE", "NO FILE", "NO MEMORY", "NO ASSET" };
-  return (e >= 0 && e <= 10) ? t[e] : "?";
+                             "BAD SCALE", "NO FILE", "NO MEMORY", "NO ASSET", "BAD FILE" };
+  return (e >= 0 && e <= 11) ? t[e] : "?";
   }
 
 /* ---- screens and blits ---- */
@@ -258,6 +298,33 @@ static void asset_place(gfx *g, const gfx_asset *a, int32_t x0, int32_t y0)
       }
   }
 
+/* ---- saved screens ---- */
+
+static int screen_save(gfx *g, const char *name)
+  {
+  if (!g->store_write) return GFX_E_FILE;
+  uint8_t h[GFX_FILE_HEADER] = { 'H', '4', '1', 'G', GFX_FILE_VERSION, 0,
+    (uint8_t)(g->w & 0xFF), (uint8_t)(g->w >> 8), (uint8_t)(g->h & 0xFF), (uint8_t)(g->h >> 8), 0, 0 };
+  const uint8_t *part[3] = { h, palp(g, g->target), scr(g, g->target) };
+  size_t size[3] = { sizeof h, 768, (size_t)g->w * g->h };
+  return g->store_write(g->store_ctx, name, part, size, 3) ? GFX_E_FILE : GFX_OK;
+  }
+
+static int screen_load(gfx *g, const char *name)
+  {
+  if (!g->store_read) return GFX_E_FILE;
+  uint8_t h[GFX_FILE_HEADER];
+  long n = g->store_read(g->store_ctx, name, 0, h, sizeof h);
+  if (n < 0) return GFX_E_FILE;
+  if (n != (long)sizeof h || memcmp(h, "H41G", 4) || h[4] != GFX_FILE_VERSION || h[5] != 0 ||
+      (h[6] | h[7] << 8) != g->w || (h[8] | h[9] << 8) != g->h) return GFX_E_BADFILE;
+  size_t np = (size_t)g->w * g->h; uint8_t last;
+  if (g->store_read(g->store_ctx, name, GFX_FILE_HEADER + 768 + np - 1, &last, 1) != 1) return GFX_E_BADFILE;  /* complete? */
+  if (g->store_read(g->store_ctx, name, GFX_FILE_HEADER, palp(g, g->target), 768) != 768) return GFX_E_BADFILE;
+  if (g->store_read(g->store_ctx, name, GFX_FILE_HEADER + 768, scr(g, g->target), np) != (long)np) return GFX_E_BADFILE;
+  return GFX_OK;
+  }
+
 /* ---- parser ---- */
 
 /* number: [-+]digits[.digits][E[-+]digits]; commas (ARCL digit grouping) skipped */
@@ -327,7 +394,7 @@ static int command(gfx *g, const char *c, size_t n)
   #define IS(s) (!strcmp(m, s))
   static const char *known[] = { "GI","C","K","T","S","M","D","P","W","R","SC","SX","SY","SP","?","?E",
                                  "B","BF","O","OF","L","LS","KP","?P","CS","SW","SN","BL","BC","BT",
-                                 "IL","IP","IF","?I", NULL };
+                                 "IL","IP","IF","?I","VS","VL","PV","PF","PO","AX","GR", NULL };
   int ok = 0;
   for (int q = 0; known[q]; q++) if (IS(known[q])) { ok = 1; break; }
   if (!ok) return GFX_E_UNKNOWN;
@@ -340,7 +407,7 @@ static int command(gfx *g, const char *c, size_t n)
     return GFX_OK;
     }
   char name[GFX_NAME] = "";
-  if (IS("IL"))                                     /* IL name id: the first argument is a name */
+  if (IS("IL") || IS("VS") || IS("VL"))            /* the first argument is a name */
     {
     while (i < n && c[i] == ' ') i++;
     size_t s0 = i, nl = 0;
@@ -453,6 +520,45 @@ static int command(gfx *g, const char *c, size_t n)
     if (!na) { g->transparent = -1; return GFX_OK; }
     if (as_index(a[0], 255, &k)) return GFX_E_RANGE;
     g->transparent = (int16_t)k; return GFX_OK;
+    }
+  if (IS("VS") || IS("VL")) { NEED(0, 0); return m[1] == 'S' ? screen_save(g, name) : screen_load(g, name); }
+  if (IS("PV"))
+    {
+    NEED(2, 2);
+    if (g->npoly >= GFX_POLY) return GFX_E_RANGE;
+    to_pixel(g, a[0], a[1], &g->polyx[g->npoly], &g->polyy[g->npoly]); g->npoly++;
+    return GFX_OK;
+    }
+  if (IS("PF") || IS("PO"))
+    {
+    NEED(0, 0);
+    if (g->npoly < 2) { g->npoly = 0; return GFX_E_ARGS; }
+    gfx_polygon(g, g->polyx, g->polyy, g->npoly, m[1] == 'F', g->pen); g->npoly = 0;
+    return GFX_OK;
+    }
+  if (IS("AX") || IS("GR"))
+    {
+    NEED(2, 2);
+    if (a[0] < 0 || a[1] < 0) return GFX_E_RANGE;
+    float xlo = g->xmin < g->xmax ? g->xmin : g->xmax, xhi = g->xmin < g->xmax ? g->xmax : g->xmin;
+    float ylo = g->ymin < g->ymax ? g->ymin : g->ymax, yhi = g->ymin < g->ymax ? g->ymax : g->ymin;
+    int32_t ox, oy; to_pixel(g, 0, 0, &ox, &oy);
+    if (IS("AX")) { gfx_drawline(g, 0, oy, g->w - 1, oy, g->pen); gfx_drawline(g, ox, 0, ox, g->h - 1, g->pen); }
+    for (int axis = 0; axis < 2; axis++)
+      {
+      float step = a[axis], lo = axis ? ylo : xlo, hi = axis ? yhi : xhi;
+      if (step <= 0 || (hi - lo) / step > 1000) continue;
+      long k0 = (long)(lo / step) - 1, k1 = (long)(hi / step) + 1;
+      for (long k = k0; k <= k1; k++)
+        {
+        float v = (float)k * step;
+        if (v < lo - step * 0.001f || v > hi + step * 0.001f) continue;
+        int32_t px, py;
+        if (axis == 0) { to_pixel(g, v, 0, &px, &py); if (IS("AX")) gfx_drawline(g, px, oy - 3, px, oy + 3, g->pen); else gfx_drawline(g, px, 0, px, g->h - 1, g->pen); }
+        else { to_pixel(g, 0, v, &px, &py); if (IS("AX")) gfx_drawline(g, ox - 3, py, ox + 3, py, g->pen); else gfx_drawline(g, 0, py, g->w - 1, py, g->pen); }
+        }
+      }
+    return GFX_OK;
     }
   if (IS("IL")) { NEED(1, 1); if (as_index(a[0], GFX_ASSETS - 1, &k)) return GFX_E_RANGE; return asset_load(g, k, name); }
   if (IS("IP"))

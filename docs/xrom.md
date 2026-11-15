@@ -58,7 +58,7 @@ HP's Math Pac and Stat Pac ROMs (local reads only, nothing committed):
 
 ## Functions
 
-XROM 17 (provisional, not checked against other modules), 21 functions, header
+XROM 17 (provisional, not checked against other modules), 28 functions, header
 `-HP41GFX 0A`. Arguments follow keying order.
 
 | Function | Stack in | Sends | Stack out |
@@ -84,8 +84,20 @@ XROM 17 (provisional, not checked against other modules), 21 functions, header
 | `GNEXT` | none | `SN` | unchanged |
 | `GIMAGE` | ALPHA: name, X: slot | `IL name id` | T lost |
 | `GSPRAY` | Z: slot, Y: x, X: y | `IP id x y` | unchanged |
+| `GSAVE` | ALPHA: name | `VS name` | T lost |
+| `GLOAD` | ALPHA: name | `VL name` | T lost |
+| `GAXES` | Y: x tick, X: y tick | `AX tx ty` | unchanged |
+| `GGRID` | Y: dx, X: dy | `GR dx dy` | unchanged |
+| `GVERT` | Y: x, X: y | `PV x y` | unchanged |
+| `GPFILL` | none | `PF` | unchanged |
+| `GPOLY` | none | `PO` | unchanged |
 
-`GTEXT` and `GIMAGE` put the command in front of ALPHA by appending it and
+The FAT follows the order of the global labels in the source, so new
+functions are only ever added at the end: reordering would renumber
+XROM 17,nn and break programs already keyed in. `tests/xrom.sh` checks the
+whole list in order.
+
+`GTEXT`, `GSAVE`, `GLOAD` and `GIMAGE` put the command in front of ALPHA by appending it and
 rotating ALPHA right with the CX function `AROT`. All functions overwrite
 ALPHA. `GRAPH` shows `NO HP41GFX` and stops if the
 peripheral is not on the loop. Coordinates are sent in FIX 4, integers in
@@ -101,8 +113,9 @@ Differences from what was agreed:
 
 ## Observed
 
-`tests/xrom.sh`, 11 checks pass, including a session of the nine functions
-added after v0 (exact lines sent, and `PGET` reading the sprayed image).
+`tests/xrom.sh`, 13 checks pass, including sessions for the functions added
+after v0 (exact lines sent; `PGET` reading a sprayed image, and a pixel of a
+triangle saved with `GSAVE` and loaded back with `GLOAD`).
 The first 9 checks: build, FAT names, checksum, `PSET` then
 `PGET` returns 5, and a keyed-in program of XROM calls draws axes and a sine
 curve. The peripheral receives the expected 73 lines, the image is pixel

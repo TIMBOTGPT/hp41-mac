@@ -31,6 +31,7 @@ sh "$WORK/src/tests/phase1.sh" "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/hpil.sh"   "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/ildev.sh"  "$UPSTREAM/MOD" || fail=1
 sh "$WORK/src/tests/gfx.sh" || fail=1
+sh "$WORK/src/tests/persist.sh" || fail=1
 sh "$WORK/src/tests/e2e_sine.sh" "$UPSTREAM/MOD" || fail=1
 if [ -x "$HOME/Projects/hp41-upstream/toolchain/focalcod/focalcod" ]; then
   sh "$WORK/src/tests/xrom.sh" "$UPSTREAM/MOD" || fail=1

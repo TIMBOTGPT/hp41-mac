@@ -24,11 +24,11 @@ python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 17 --h
   --title "HP41GFX graphics v0" > "$TMP/build.out" 2>&1 && pass "XROM built: $(sed 's/.*: //' "$TMP/build.out")" || { bad "XROM build"; cat "$TMP/build.out"; exit 1; }
 "$B/hp41-headless" --modinfo "$XR" > "$TMP/modinfo"
 names=$(grep -E '^17,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^17,00' | awk '{print $3}' | tr '\n' ' ')
-[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY " ] && pass "FAT: $names" || bad "FAT names [$names]"
+[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY GSAVE GLOAD GAXES GGRID GVERT GPFILL GPOLY " ] && pass "FAT: $names" || bad "FAT names [$names]"
 grep -q 'Correct - Same as Computed Value' "$TMP/modinfo" && pass "ROM checksum correct" || bad "ROM checksum"
 
 session() { # name, keys
-  "$B/hp41-gfx" --out 61001 --in 61000 --assets "$HERE/assets" --log "$TMP/$1.gfxlog" --png "$TMP/$1.png" --hash 1 > "$TMP/$1.gfxout" 2>&1 &
+  "$B/hp41-gfx" --out 61001 --in 61000 --assets "$HERE/assets" --store "$TMP/store" --log "$TMP/$1.gfxlog" --png "$TMP/$1.png" --hash 1 > "$TMP/$1.gfxout" 2>&1 &
   dev=$!
   i=0; while ! grep -q listening "$TMP/$1.gfxout" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
   "$B/hp41-headless" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --mod "$XR" --hpil localhost:61001:61000 \
@@ -77,4 +77,15 @@ printf 'GI:C 0\nM 100.0000 100.0000\nB 200.0000 150.0000\nK 3\nOF 20.0000\nL HEL
 cmp -s "$TMP/more.txt" "$TMP/more.exp" && pass "GBOX GCOLOR GFCIRC GTEXT GPAL GIMAGE GSPRAY GNEXT PGET send the documented lines" || { bad "new functions' traffic:"; diff "$TMP/more.exp" "$TMP/more.txt"; }
 got=$(final "$TMP/more.calc")
 [ "$got" = " 4.0000" ] && pass "PGET reads the sprayed image's blue corner pixel (4)" || bad "PGET after GSPRAY gave [$got]"
+
+# save, axes, grid, polygon, load, read back
+session save "ON $(F 'G R A P H') 7 $(F 'G C O L O R') 1 0 0 ENTER 1 0 0 $(F 'G V E R T') 2 0 0 ENTER 1 0 0 $(F 'G V E R T') \
+1 5 0 ENTER 2 0 0 $(F 'G V E R T') $(F 'G P F I L L') ALPHA T R I ALPHA $(F 'G S A V E') $(F 'G R A P H') 5 0 ENTER 5 0 $(F 'G G R I D') \
+0 ENTER 0 $(F 'G A X E S') 1 0 0 ENTER 1 0 0 $(F 'G V E R T') 1 1 0 ENTER 1 1 0 $(F 'G V E R T') $(F 'G P O L Y') \
+ALPHA T R I ALPHA $(F 'G L O A D') 1 5 0 ENTER 1 2 0 $(F 'P G E T')"
+sed -n 's/^ *[0-9.]* line \[\(.*\)\] -> .*/\1/p' "$TMP/save.gfxlog" > "$TMP/save.txt"
+printf 'GI:C 0\nK 7\nPV 100.0000 100.0000\nPV 200.0000 100.0000\nPV 150.0000 200.0000\nPF\nVS TRI\nGI:C 0\nGR 50.0000 50.0000\nAX 0.0000 0.0000\nPV 100.0000 100.0000\nPV 110.0000 110.0000\nPO\nVL TRI\nR 150 120\n' > "$TMP/save.exp"
+cmp -s "$TMP/save.txt" "$TMP/save.exp" && pass "GVERT GPFILL GSAVE GGRID GAXES GPOLY GLOAD send the documented lines" || { bad "save session traffic:"; diff "$TMP/save.exp" "$TMP/save.txt"; }
+got=$(final "$TMP/save.calc")
+[ "$got" = " 7.0000" ] && pass "after GLOAD, PGET inside the saved triangle reads 7" || bad "PGET after GLOAD gave [$got]"
 exit $fail

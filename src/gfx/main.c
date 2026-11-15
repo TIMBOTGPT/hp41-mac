@@ -18,6 +18,8 @@
  * --assets DIR is where IL finds NAME.png or NAME.bmp (default
  *   ~/Library/Application Support/hp41-mac/assets); --asset-mem BYTES sizes
  *   the asset pool (default 4 MiB).
+ * --store DIR is where VS and VL keep saved screens, NAME.h41g (default
+ *   ~/Library/Application Support/hp41-mac/screens).
  * --window 1 [--scale N] shows the displayed screen live in a window. On the
  *   loop it keeps accepting the calculator after a disconnect; quit by
  *   closing the window. With --script it shows the result until closed.
@@ -204,7 +206,7 @@ static void *loop_thread(void *arg) { (void)arg; run_loop(g_out, g_in, g_did, 1)
 
 int main(int argc, char **argv)
   {
-  const char *script = NULL, *png = NULL, *logpath = NULL, *did = "HP41GFX", *assetdir = NULL;
+  const char *script = NULL, *png = NULL, *logpath = NULL, *did = "HP41GFX", *assetdir = NULL, *storedir = NULL;
   long assetmem = 4L << 20;
   int out = 60001, in = 60000, screens = 16, hash = 0, window = 0, scale = 2;
   for (int i = 1; i < argc; i += 2)
@@ -221,6 +223,7 @@ int main(int argc, char **argv)
     else if (!strcmp(a, "--hash")) hash = atoi(v);
     else if (!strcmp(a, "--window")) window = atoi(v);
     else if (!strcmp(a, "--assets")) assetdir = v;
+    else if (!strcmp(a, "--store")) storedir = v;
     else if (!strcmp(a, "--asset-mem")) assetmem = atol(v);
     else if (!strcmp(a, "--scale")) scale = atoi(v);
     else { fprintf(stderr, "unknown option %s\n", a); return 2; }
@@ -233,6 +236,9 @@ int main(int argc, char **argv)
   if (!assetdir) { snprintf(defdir, sizeof defdir, "%s/Library/Application Support/hp41-mac/assets", getenv("HOME") ? getenv("HOME") : "."); assetdir = defdir; }
   void *pool = assetmem > 0 ? malloc((size_t)assetmem) : NULL;
   gfx_set_assets(&G, pool, pool ? (size_t)assetmem : 0, gfx_host_load, (void *)assetdir);
+  static char defstore[1024];
+  if (!storedir) { snprintf(defstore, sizeof defstore, "%s/Library/Application Support/hp41-mac/screens", getenv("HOME") ? getenv("HOME") : "."); storedir = defstore; }
+  gfx_set_store(&G, gfx_host_write, gfx_host_read, (void *)storedir);
   if (logpath && !(g_log = fopen(logpath, "w"))) { perror(logpath); return 1; }
   int rc = 0;
   if (script)

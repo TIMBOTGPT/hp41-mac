@@ -47,7 +47,7 @@ contributors), from which the emulation core is built.
 
     make            # needs the V41 R9O source at ~/Projects/hp41-upstream/v41r9o/src/V41R9
     tests/basic.sh  # or: make UPSTREAM=/path/to/V41R9
-    tests/phase1.sh tests/hpil.sh tests/ildev.sh tests/gfx.sh tests/e2e_sine.sh
+    tests/phase1.sh tests/hpil.sh tests/ildev.sh tests/gfx.sh tests/persist.sh tests/e2e_sine.sh
     tests/xrom.sh   # needs the focalcod/asmnut toolchain, see docs/xrom.md
     tests/clean_build.sh
     tools/hpil_throughput.sh   # HP-IL throughput at authentic speed

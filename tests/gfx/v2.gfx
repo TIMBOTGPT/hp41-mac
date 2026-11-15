@@ -1,0 +1,120 @@
+# polygons, axes, grid, and saving and loading a screen within one run
+GI
+# filled triangle: inside, outside, a vertex and a point on the slanted edge
+K 3:PV 10 10:PV 30 10:PV 10 30:PF
+!pixel 0 15 15 3
+!pixel 0 25 25 0
+!pixel 0 30 10 3
+!pixel 0 20 20 3
+# outline only
+K 4:PV 100 100:PV 120 100:PV 120 120:PV 100 120:PO
+!pixel 0 110 100 4
+!pixel 0 110 110 0
+!pixel 0 120 110 4
+PF
+!err 2
+PV 1 1:PO
+!err 2
+# at most 64 vertices; the list survives across lines
+PV 0 200
+PV 1 200
+PV 2 200
+PV 3 200
+PV 4 200
+PV 5 200
+PV 6 200
+PV 7 200
+PV 8 200
+PV 9 200
+PV 10 200
+PV 11 200
+PV 12 200
+PV 13 200
+PV 14 200
+PV 15 200
+PV 16 200
+PV 17 200
+PV 18 200
+PV 19 200
+PV 20 200
+PV 21 200
+PV 22 200
+PV 23 200
+PV 24 200
+PV 25 200
+PV 26 200
+PV 27 200
+PV 28 200
+PV 29 200
+PV 30 200
+PV 31 200
+PV 32 200
+PV 33 200
+PV 34 200
+PV 35 200
+PV 36 200
+PV 37 200
+PV 38 200
+PV 39 200
+PV 40 200
+PV 41 200
+PV 42 200
+PV 43 200
+PV 44 200
+PV 45 200
+PV 46 200
+PV 47 200
+PV 48 200
+PV 49 200
+PV 50 200
+PV 51 200
+PV 52 200
+PV 53 200
+PV 54 200
+PV 55 200
+PV 56 200
+PV 57 200
+PV 58 200
+PV 59 200
+PV 60 200
+PV 61 200
+PV 62 200
+PV 63 200
+PV 70 200
+!err 4
+PO
+!err 0
+# axes through the user origin with ticks
+GI:SX -10 10:SY -10 10:K 7:AX 5 5
+!pixel 0 0 160 7
+!pixel 0 479 160 7
+!pixel 0 240 0 7
+!pixel 0 240 319 7
+!pixel 0 359 157 7
+!pixel 0 359 156 0
+!pixel 0 237 80 7
+!pixel 0 236 80 0
+# grid lines every 5 user units
+GI:SX 0 10:SY 0 10:K 9:GR 5 5
+!pixel 0 240 50 9
+!pixel 0 241 50 0
+!pixel 0 50 160 9
+!pixel 0 50 161 0
+!pixel 0 0 50 9
+!pixel 0 479 50 9
+GR -1 1
+!err 4
+# save the target screen, load it into another
+GI:T 2:C 9:W 5 5 3:KP 9 1 2 3:VS TESTSCR
+!err 0
+T 3:VL TESTSCR
+!pixel 3 5 5 3
+!pixel 3 6 6 9
+?P 9
+!reply 1 2 3
+VL NOSUCHSCR
+!err 8
+VS BAD/NAME
+!err 8
+?E
+!reply E 8 NO FILE
