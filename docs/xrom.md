@@ -82,6 +82,33 @@ Where the 2,069 instructions of one microcode call go: HP-IL module 530,
 mainframe byte fetch for `OUTA` 249, number formatting about 500, appending
 to ALPHA 360, step and XROM dispatch about 300, our own code 58.
 
+### GBYTES: block data from registers
+
+`GBYTES` (XROM 8,29, microcode only; in a FOCAL-only build its stub stops
+with `NEEDS MCODE`) sends the data part of a layer 2 block. The program
+sends the header line itself, then the bytes:
+
+    "BW 0 0 200 1"   OUTA         header: 200 pixels at 0,0
+    1 ENTER 200      GBYTES       R01..R200 as 200 bytes, then LF
+
+Each register holds an integer 0 to 255 (a number with a fraction sends its
+integer part). All registers are checked before anything is sent:
+NONEXISTENT if the range goes past SIZE, DATA ERROR for ALPHA data,
+negative numbers, fractions below 1 and values over 255. So an error never
+leaves the peripheral waiting for the rest of a block. The check reads the
+BCD digits directly (sign 0, exponent 0 to 2, three-digit mantissa at most
+255 compared as hex), the send pass converts with the mainframe's `BCDBIN`
+and sends each byte with the HP-IL module's `SDATA0` after `SCHDEV` and
+`LISTEN`, then ends with `UNLCHK`, as `OUTA` does.
+
+Measured at stock speed: 72 bytes/s during the send, about 87 instructions
+per byte for the whole call (own code 37, `BCDBIN` 35, HP-IL module 13);
+`OUTXB` manages 2.6 bytes/s. One byte per register costs memory: a CX holds
+at most 319 registers.
+
+Pitfall found here: asmnut accepted `C=DATA` (the HP mnemonic) and assembled
+nothing for it. The Zencode names are `RDATA` and `WDATA`.
+
 ## User code in ROM
 
 Established 15 November 2026 from a forum description and checked against
@@ -150,6 +177,7 @@ of `GRAPH`, `GCOLOR`, `PSET` and `PGET` ran correctly.
 | `GVERT` | Y: x, X: y | `PV x y` | unchanged |
 | `GPFILL` | none | `PF` | unchanged |
 | `GPOLY` | none | `PO` | unchanged |
+| `GBYTES` | Y: first register r, X: count n | the bytes of Rr .. Rr+n-1, then LF (microcode only) | unchanged, ALPHA kept |
 
 The FAT follows the order of the global labels in the source, so new
 functions are only ever added at the end: reordering would renumber

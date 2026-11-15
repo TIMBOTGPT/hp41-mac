@@ -39,6 +39,8 @@
 ; GVERT    Y: x  X: y                add a polygon vertex
 ; GPFILL   none                      fill and outline the polygon, then clear it
 ; GPOLY    none                      outline the closed polygon, then clear it
+; GBYTES   Y: first register  X: count   send Rr.. (0-255 each) as a block's bytes
+;          and LF (microcode only; this FOCAL stub stops with NEEDS MCODE)
  LBL "GRAPH"
  "HP41GFX"
  FINDID
@@ -207,6 +209,11 @@
  LBL "GPOLY"
  "PO"
  OUTA
+ RTN
+ LBL "GBYTES"
+ "NEEDS MCODE"
+ AVIEW
+ STOP
  RTN
  LBL 90
  FIX 0

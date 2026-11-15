@@ -281,3 +281,110 @@
         LDI     050             ; P
         B=C     ALL             ; NCGOREL uses C
         NCGOREL (CMD4)
+
+; ---------------------------------------------------------------------------
+; GBYTES   Y: first register r  X: count n
+; Sends the integers in Rr .. Rr+n-1 (0 to 255, one byte each) as HP-IL data
+; frames to the selected device, then LF: the data part of a layer 2 block
+; whose header line (BW, BU) the program sent before with OUTA.
+; All registers are checked first, so an error sends nothing:
+; NONEXISTENT (register missing), DATA ERROR (ALPHA data, negative,
+; a fraction below 1, or over 255). A loop error ends the block early and shows
+; the HP-IL module's message (TRANSMIT ERR and so on).
+; Fixed addresses: [BCDBIN] 02E3 float to binary (assumes HEX mode),
+; [CHKADR] 166E register check, [ERRDE] 282D DATA ERROR, and in the HP-IL
+; module SCHDEV 72DD, LISTEN 70DD, SDATA0 7126, SDATA 7128, UNLCHK 7336.
+; Loop state in B: B[2:0] register address, B[5:3] bytes left. BCDBIN uses
+; only A.X, C and S8; SDATA uses only C.
+; Stack unchanged, ALPHA unchanged.
+
+        .NAME   "GBYTES"
+(GBYTES) SETHEX
+        C=0     X
+        RAMSLCT
+        C=REGN  3               ; X: n
+        NCXQ    [BCDBIN]
+        ?C#0    X
+        JC      (GBY1)
+        RTN                     ; n = 0: nothing to send
+(GBY1)  M=C                     ; M.X = n
+        C=REGN  2               ; Y: r (chip 0 enabled by BCDBIN)
+        NCXQ    [BCDBIN]
+        A=C     X
+        C=REGN  13
+        RCR     3               ; C.X = address of R00
+        C=A+C   X               ; first register
+        N=C                     ; N.X = first address
+        C=M
+        A=C     X
+        C=N
+        C=A+C   X
+        C=C-1   X               ; last register
+        SF      9
+        NCXQ    [CHKADR]        ; NONEXISTENT if it is not there
+        SETHEX
+        A=0     ALL             ; build the loop state
+        C=M
+        A=C     X
+        C=A     ALL             ; C = n alone
+        RCR     11              ; C[5:3] = n
+        A=C     ALL
+        C=N
+        A=C     X               ; A[5:3] = n, A[2:0] = first address
+        C=A     ALL
+        N=C                     ; keep it for the send pass
+        B=C     ALL
+(GBV)   C=B     ALL             ; check pass, without converting:
+        RAMSLCT
+        RDATA
+        ?C#0    S               ; negative, or ALPHA data
+        JC      (GBBAD)
+        A=C     X               ; exponent
+        LDI     003
+        ?A<C    X               ; 0 to 2 (a negative exponent is 9xx)
+        JNC     (GBBAD)
+        LDI     002
+        ?A#C    X
+        JC      (GBV2)          ; under 100
+        RDATA                   ; three digits: mantissa at most 255
+        RCR     10              ; C.X = the first three digits, as BCD
+        A=C     X
+        LDI     256
+        ?A<C    X               ; BCD digits compare like hex
+        JC      (GBV2)
+(GBBAD) NCGO    [ERRDE]         ; DATA ERROR, nothing sent
+(GBV2)  C=B     ALL
+        C=C+1   X
+        RCR     3
+        C=C-1   X
+        RCR     11
+        B=C     ALL
+        RCR     3
+        ?C#0    X
+        JC      (GBV)
+        NCXQ    72DD            ; SCHDEV: chip on, device number
+        NCXQ    70DD            ; LISTEN: address it as listener
+        ST=0
+        CF      9               ; as OUTA: S9 is the loop error flag
+        SETHEX
+        C=N
+        B=C     ALL
+(GBS)   C=B     ALL             ; send pass
+        RAMSLCT
+        RDATA
+        NCXQ    [BCDBIN]
+        NCXQ    7126            ; SDATA0: one data frame, S9 on error
+        ?FS     9
+        JC      (GBX)
+        C=B     ALL
+        C=C+1   X
+        RCR     3
+        C=C-1   X
+        RCR     11
+        B=C     ALL
+        RCR     3
+        ?C#0    X
+        JC      (GBS)
+        LDI     00A             ; LF ends the block
+        NCXQ    7128            ; SDATA
+(GBX)   NCGO    7336            ; UNLCHK: UNL, then any error message

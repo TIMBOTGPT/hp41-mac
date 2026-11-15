@@ -125,10 +125,11 @@ Not done or not verified:
    `xrom/src/hp41gfx_mc.src`, `docs/xrom.md`): same bytes, user's display
    format restored, 0.56 to 0.39 s per call. HP's VASM listings of the
    HP-IL module and the mainframe are on the NAS
-   (`docs/microcode-research.md`). Next, ranked there: a block sender
-   (address once, `SDATA` per byte from registers or extended memory,
-   estimate 300 to 500 bytes/s at stock speed against 2.6 now), then
-   sending without ALPHA. Smaller: asset memory compaction on free, saving the asset
+   (`docs/microcode-research.md`). Block sender `GBYTES` done: one byte per
+   register, 72 bytes/s at stock speed against 2.6 for `OUTXB`. Next, ranked
+   in `docs/microcode-research.md`: drawing without ALPHA (estimate 0.25 s per
+   call), then packed bulk (6 bytes per ALPHA-data register, estimate 250
+   bytes/s). Smaller: asset memory compaction on free, saving the asset
    store, palette import with images, dithering option. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41

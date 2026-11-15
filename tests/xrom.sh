@@ -27,7 +27,7 @@ python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 8 --he
 [ -n "$MC" ] && pass "$(sed -n '2p' "$TMP/build.out")"
 "$B/hp41-headless" --modinfo "$XR" > "$TMP/modinfo"
 names=$(grep -E '^08,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^08,00' | awk '{print $3}' | tr '\n' ' ')
-[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY GSAVE GLOAD GAXES GGRID GVERT GPFILL GPOLY " ] && pass "FAT: $names" || bad "FAT names [$names]"
+[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY GSAVE GLOAD GAXES GGRID GVERT GPFILL GPOLY GBYTES " ] && pass "FAT: $names" || bad "FAT names [$names]"
 grep -q 'Correct - Same as Computed Value' "$TMP/modinfo" && pass "ROM checksum correct" || bad "ROM checksum"
 
 session() { # name, keys
@@ -116,4 +116,40 @@ got=$(final "$TMP/bulk.calc")
 grep -q 'line \[BW 10 10 2 1\] -> ok' "$TMP/bulk.gfxlog" && grep -q 'reply 7' "$TMP/bulk.gfxlog" \
   && pass "BW block sent with OUTXB (bytes 5 7 LF) written, PGET 11 10 reads 7" || bad "BW from OUTXB"
 [ "$got" = " 12.0000" ] && pass "BR read back with two INXB: 5 + 7 = 12" || bad "BR with INXB gave [$got]"
+
+# microcode bulk: a program fills R01..R200 with 1..200, sends BW 0 0 200 1 with OUTA,
+# then the 200 bytes with GBYTES; PGET 5 0 reads 6, PGET 199 0 reads 200
+if [ -n "$MC" ]; then
+  session gby "ON $X S I Z E ALPHA 2 1 0 PRGM SHIFT STO 0 1 $(F 'G R A P H') 1 . 2 STO 0 0 SHIFT STO 0 2 RCL 0 0 $(F 'I N T') \
+STO SHIFT 0 0 $X I S G ALPHA 0 0 SHIFT RCL 0 2 ALPHA $(A 'BW 0 0 200 1') ALPHA $(F 'O U T A') 1 ENTER 2 0 0 $(F 'G B Y T E S') \
+5 ENTER 0 $(F 'P G E T') 1 9 9 ENTER 0 $(F 'P G E T') PRGM XEQ 0 1"
+  got=$(final "$TMP/gby.calc")
+  grep -q 'line \[BW 0 0 200 1\] -> ok' "$TMP/gby.gfxlog" && ! grep -q -- '-> [A-Z]' "$TMP/gby.gfxlog" \
+    && grep -q 'line \[R 5 0\] -> ok, reply 6$' "$TMP/gby.gfxlog" && [ "$got" = " 200.0000" ] \
+    && pass "GBYTES sent 200 bytes from R01..R200 as a BW block: PGET 5 0 reads 6, PGET 199 0 reads 200" || bad "GBYTES: display [$got]"
+  rate=$(python3 - "$TMP/gby.ilog" <<'EOF'
+import sys
+t = []
+for l in open(sys.argv[1]):
+    p = l.split()
+    if l.startswith('#') or len(p) < 6: continue
+    if p[2] == '>' and p[3][0] == '0': t.append((float(p[0]), int(p[3], 16) & 0xFF))
+# the block: the 201 data frames after the LF that ends "BW 0 0 200 1"
+i = max(k for k in range(len(t)) if t[k][1] == 10 and k + 201 < len(t) and t[k + 201][1] == 10)
+print("%.0f" % (200 / (t[i + 200][0] - t[i + 1][0])))
+EOF
+)
+  echo "      GBYTES rate at stock speed: $rate bytes/s (OUTXB: 2.6)"
+  # errors are found before anything is sent
+  session gbe "ON $X S I Z E ALPHA 0 0 5 2 5 6 STO 0 1 $(F 'G R A P H') 1 ENTER 1 $(F 'G B Y T E S')"
+  session gbn "ON $X S I Z E ALPHA 0 0 5 $(F 'G R A P H') 1 ENTER 9 $(F 'G B Y T E S')"
+  # after the LF ending GRAPH's "GI:C 0" the only data frames are accessory ID
+  # replies (66) to the polls the HP-IL module's printer ROM makes after a function
+  after() { awk '$3==">" && $5=="DAB" { if (lf && $6 != "66") n++; if ($6 == "0A") { lf = 1; n = 0 } } END { print n + 0 }' "$1"; }
+  d1=$(after "$TMP/gbe.ilog"); d2=$(after "$TMP/gbn.ilog")
+  grep -q 'line \[GI:C 0\]' "$TMP/gbe.gfxlog" && grep -q 'DATA ERROR' "$TMP/gbe.calc" && grep -q 'NONEXISTENT' "$TMP/gbn.calc" \
+    && [ "$d1" = 0 ] && [ "$d2" = 0 ] \
+    && pass "GBYTES: 256 gives DATA ERROR, R01..R09 with SIZE 005 gives NONEXISTENT, no byte sent in either" \
+    || bad "GBYTES errors: last frames $d1 $d2, $(final "$TMP/gbe.calc") $(final "$TMP/gbn.calc")"
+fi
 exit $fail

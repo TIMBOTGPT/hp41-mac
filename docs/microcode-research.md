@@ -63,20 +63,35 @@ and `OUTA` fetches each byte back out of ALPHA through the mainframe, about
 30 instructions (5 ms) per byte. The earlier breakdown (0.55 s of FOCAL
 before each `OUTA`) also counted the user's own program steps between calls.
 
+## Bulk sender: done as GBYTES (15 November 2026)
+
+One byte per data register, integers 0 to 255. Measured: 72 bytes/s during
+the send at stock speed, about 87 instructions per byte for the whole call
+(own code 37, `BCDBIN` 35, HP-IL module 13), against 2.6 bytes/s for
+`OUTXB`. My estimate of 300 to 500 bytes/s assumed bytes ready to send; the
+BCD to binary conversion and the up-front check cost most of the time. The
+HP-IL module itself takes only 13 instructions per byte when the loop is
+fast.
+
+Faster bulk, not built: packed registers. A register holding ALPHA data
+(as `ASTO` stores it, built with the CX `XTOA`) carries 6 bytes and needs
+no conversion: roughly 20 to 25 instructions per byte, about 250 bytes/s
+(estimate), and 6 times less memory. Against it: leading null bytes in
+ALPHA are awkward on the HP-41, so pixel value 0 needs care when building
+the strings.
+
 ## What would make it faster, ranked
 
-1. **Bulk sender (recommended next, about 60%).** Address once, then
-   `SDATA` per byte from data registers or an extended memory file. The
-   per-byte cost drops to roughly 10 to 15 instructions (2 to 3 ms, about
-   300 to 500 B/s at stock speed, estimate) against 2.6 B/s for `OUTXB`
-   now. This is the largest gap left on a stock HP-41.
-2. **Send without ALPHA (about 30%).** Format with `FORMAT` (display
+1. **Send without ALPHA (about 50%).** Format with `FORMAT` (display
    registers) or straight from the BCD digits, and send each byte with
    `SDATA`. Saves the ALPHA shuffling and the byte fetch, roughly 600 to
    800 of the 2,069 instructions: about 0.25 s per call instead of 0.39 s
-   (estimate). Exact bytes would have to be rebuilt by hand (rounding, digit
-   grouping), so the golden tests would need care.
-3. **Binary drawing commands (about 10%).** Coordinates as 2-byte integers
+   (estimate). Every drawing program gains. Exact bytes would have to be
+   rebuilt by hand (rounding, digit grouping), so the golden tests would
+   need care.
+2. **Packed bulk (above, about 35%).** Only matters if a stock HP-41 sends
+   images or large blocks.
+3. **Binary drawing commands (about 15%).** Coordinates as 2-byte integers
    (layer 2), about 6 bytes per `D` instead of 18. Needs protocol additions
    and is mostly worth it on fast machines, where formatting is cheap anyway.
 

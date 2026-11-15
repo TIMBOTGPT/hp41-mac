@@ -129,13 +129,25 @@ for ch in chunks:
     ranges.append((pos + 2, pos + 2 + nb)); pos += 2 + nb
 njumps = compile_jumps(words, ranges)
 
-mlines, mnames = [], set()
+# microcode functions: a label (NAME) right after .NAME "NAME"
+mlines, mnames = [], []
 if a.mcode:
     mlines = open(a.mcode).read().splitlines()
+    named = None
     for l in mlines:
-        m = re.match(r"^\((\w+)\)", l.split(";")[0])
-        if m: mnames.add(m.group(1))
+        code = l.split(";")[0].strip()
+        if not code: continue
+        m = re.match(r'^\.NAME\s+"(\w+)"', code)
+        if m: named = m.group(1); continue
+        m = re.match(r"^\((\w+)\)", code)
+        if m and m.group(1) == named: mnames.append(named)
+        named = None
 mfuncs = [n for n, _ in labels if n in mnames]
+# the FOCAL source alone fixes the FAT order (append-only), so every
+# microcode function needs a global label there, even a stub
+extra = [n for n in mnames if n not in [x for x, _ in labels]]
+if extra:
+    sys.exit("microcode functions without a global label in %s: %s" % (a.source, " ".join(extra)))
 
 nf = 1 + len(labels)
 src = [".ZENCODE", ".XROM %d" % a.xrom, ".FCNS %d" % nf, ".ORG 002", ".DEFR4K (HEADER)"]

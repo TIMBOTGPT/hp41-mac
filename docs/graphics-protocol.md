@@ -143,8 +143,9 @@ I/O module's `OUTXB` and `INXB` can, one byte per call, and the tests use
 them: a block written with `OUTXB` and read back with `INXB` from a real
 HP-41 program (`tests/xrom.sh`). That path is slow: 387 ms per byte at
 stock speed (2.6 bytes/s), 8.3 ms at 50x (120 bytes/s), because every call
-addresses the loop again. Practical bulk transfer needs a microcode sender
-that addresses once and streams the block.
+addresses the loop again. The XROM's microcode `GBYTES` addresses once and
+streams the block from data registers (one byte each): 72 bytes/s at stock
+speed (`docs/xrom.md`). Reading a block back (`BR`) still needs `INXB`.
 
 ## Decided 15 November 2026
 
