@@ -79,6 +79,14 @@ Built and observed working:
   test file: R05 = 42 survived adding HPIL and HP41GFX, and `GRAPH`, `PSET`,
   `PGET` through the app returned 5.
 
+- Graphics features (15 Nov 2026): box, filled box, circle, filled
+  circle, text (5x7 font from emu71-mac, scalable), palette set and read,
+  copy, swap and next screen, blits copying indices or converting colours,
+  a transparent index, and an image asset store (load PNG/BMP by name on
+  the host, quantise once, place anywhere). XROM grew to 21 functions.
+  Golden scripts: `tests/gfx/v1.gfx`, `screens16.gfx` (16 screens keep
+  their own content and palette), `limits.gfx` (2 screens, tiny asset pool).
+
 Not done or not verified:
 
 - Program editing and SST/BST are not tested on their own.
@@ -97,8 +105,9 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Phase 3, continued: the rest of the brief's command set (box, circle,
-   text, palette, roll, blit), then layer 2 (binary bulk) and a microcode
+1. Graphics, remaining: saving and restoring screens and assets (versioned
+   file format), filled polygons, grid and axes helpers, then layer 2
+   (binary bulk: VWRITE/VREAD, RWRITE/RREAD, asset upload) and a microcode
    XROM that restores the display format and sends bulk data. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41

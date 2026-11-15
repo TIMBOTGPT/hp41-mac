@@ -1,0 +1,145 @@
+# Protocol v0 additions: box, circle, text, palette, screens, blits, images.
+# Run: build/hp41-gfx --script tests/gfx/v1.gfx --assets tests/assets
+GI
+
+# box outline from the pen to the opposite corner; the pen moves there
+M 10 10:B 20 15
+!pixel 0 10 10 1
+!pixel 0 20 15 1
+!pixel 0 15 10 1
+!pixel 0 15 15 1
+!pixel 0 10 12 1
+!pixel 0 15 12 0
+# filled box
+K 3:M 30 30:BF 33 32
+!pixel 0 31 31 3
+!pixel 0 33 32 3
+!pixel 0 34 32 0
+BF 1
+!err 2
+
+# circle outline and filled circle, centred on the pen
+K 4:M 100 100:O 5
+!pixel 0 105 100 4
+!pixel 0 100 95 4
+!pixel 0 100 100 0
+K 5:OF 3
+!pixel 0 100 100 5
+!pixel 0 103 100 5
+!pixel 0 104 100 0
+O -1
+!err 4
+
+# text: 5x7 glyphs, 6 pixel pitch, top left at the pen, pen colour
+K 6:M 200 50:L A
+!pixel 0 200 51 6
+!pixel 0 200 50 0
+!pixel 0 201 50 6
+!pixel 0 201 54 6
+!pixel 0 201 52 0
+# L takes the rest of the line, separators included
+M 200 70:L A:B
+!err 0
+!pixel 0 207 71 6
+!pixel 0 212 70 6
+# the pen moves past the text (and ':P 0 0' here is text, not a command)
+M 200 90:L AB:P 0 0
+!pixel 0 0 0 0
+M 200 110:L AB
+D 212 120
+!pixel 0 212 115 6
+# text scale
+LS 2:M 300 100:L A
+!pixel 0 300 102 6
+!pixel 0 301 103 6
+LS 9
+!err 4
+LS 1
+
+# palette of the target screen
+KP 200 10 20 30
+?P 200
+!reply 10 20 30
+?P 256
+!err 4
+KP 1 2 3
+!err 2
+
+# screens: copy, swap, show next
+GI
+T 2:C 7:KP 7 1 2 3
+T 3:CS 2
+!pixel 3 0 0 7
+?P 7
+!reply 1 2 3
+T 0:SW 2 0
+!pixel 0 5 5 7
+!pixel 2 5 5 0
+?P 7
+!reply 1 2 3
+S 15:SN
+!shown 0
+SN
+!shown 1
+CS 16
+!err 4
+
+# blit, copying indices
+GI
+T 1:W 0 0 9:W 1 0 0:W 2 0 9
+T 0:BL 1 0 0 3 1 50 50
+!pixel 0 50 50 9
+!pixel 0 51 50 0
+!pixel 0 52 50 9
+# with a transparent index
+C 5:BT 0:BL 1 0 0 3 1 60 50:BT
+!pixel 0 60 50 9
+!pixel 0 61 50 5
+!pixel 0 62 50 9
+# colour-converting blit: screen 1 entry 9 is pure red, so BC gives screen 0's
+# nearest entry (2, red); BL copies the index unchanged
+T 1:KP 9 255 0 0:T 0:BC 1 0 0 1 1 70 50
+!pixel 0 70 50 2
+BL 1 0 0 1 1 71 50
+!pixel 0 71 50 9
+# overlapping blit within one screen moves the row right by one
+T 1:BL 1 0 0 3 1 1 0
+!pixel 1 1 0 9
+!pixel 1 2 0 0
+!pixel 1 3 0 9
+T 0
+BL 1 0 0 3 1 50
+!err 2
+BL 16 0 0 1 1 0 0
+!err 4
+BL 1 0 0 1.5 1 0 0
+!err 3
+
+# image assets: SPRITE.png is 8x8 white, blue at 0 0, transparent 4x4 centre
+IL SPRITE 0
+!err 0
+?I 0
+!reply 8 8
+IP 0 100 200
+!pixel 0 100 200 4
+!pixel 0 101 200 1
+!pixel 0 103 203 5
+!pixel 0 107 207 1
+!pixel 0 108 208 5
+# the same asset sprayed on another screen
+T 4:IP 0 0 0:T 0
+!pixel 4 0 0 4
+!pixel 4 3 3 0
+R 103 203
+!reply 5
+IL NOSUCH 1
+!err 8
+IP 1 0 0
+!err 10
+IL BAD/NAME 2
+!err 8
+IF 0
+IP 0 0 0
+!err 10
+?E
+!reply E 10 NO ASSET

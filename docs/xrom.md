@@ -58,7 +58,7 @@ HP's Math Pac and Stat Pac ROMs (local reads only, nothing committed):
 
 ## Functions
 
-XROM 17 (provisional, not checked against other modules), header
+XROM 17 (provisional, not checked against other modules), 21 functions, header
 `-HP41GFX 0A`. Arguments follow keying order.
 
 | Function | Stack in | Sends | Stack out |
@@ -75,8 +75,19 @@ XROM 17 (provisional, not checked against other modules), header
 | `GPIXEL` | none | `SP` | unchanged |
 | `PSET` | Z: x, Y: y, X: index | `W x y i` | unchanged |
 | `PGET` | Y: x, X: y | `R x y`, `INA` | index in X, stack lifted |
+| `GBOX` | Y: x, X: y | `B x y` | unchanged |
+| `GFBOX` | Y: x, X: y | `BF x y` | unchanged |
+| `GCIRC` | X: radius | `O r` | unchanged |
+| `GFCIRC` | X: radius | `OF r` | unchanged |
+| `GTEXT` | ALPHA: text (up to 22 characters) | `L text` | T lost |
+| `GPAL` | T: index, Z: r, Y: g, X: b | `KP i r g b` | unchanged |
+| `GNEXT` | none | `SN` | unchanged |
+| `GIMAGE` | ALPHA: name, X: slot | `IL name id` | T lost |
+| `GSPRAY` | Z: slot, Y: x, X: y | `IP id x y` | unchanged |
 
-All functions overwrite ALPHA. `GRAPH` shows `NO HP41GFX` and stops if the
+`GTEXT` and `GIMAGE` put the command in front of ALPHA by appending it and
+rotating ALPHA right with the CX function `AROT`. All functions overwrite
+ALPHA. `GRAPH` shows `NO HP41GFX` and stops if the
 peripheral is not on the loop. Coordinates are sent in FIX 4, integers in
 FIX 0 with flag 29 clear.
 
@@ -90,7 +101,9 @@ Differences from what was agreed:
 
 ## Observed
 
-`tests/xrom.sh`, 9 checks pass: build, FAT names, checksum, `PSET` then
+`tests/xrom.sh`, 11 checks pass, including a session of the nine functions
+added after v0 (exact lines sent, and `PGET` reading the sprayed image).
+The first 9 checks: build, FAT names, checksum, `PSET` then
 `PGET` returns 5, and a keyed-in program of XROM calls draws axes and a sine
 curve. The peripheral receives the expected 73 lines, the image is pixel
 identical to the golden one, no errors. In program mode the steps display

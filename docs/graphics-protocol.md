@@ -65,6 +65,24 @@ First command set, mapped to the brief's first XROM subset:
 | `PGET` | `R` | `x y` | query: reply is the pixel's index, e.g. `17` |
 | `GSCALE` | `SC` | `xmin xmax ymin ymax` | later M D P use these user units; `SP` returns to pixels |
 | `GSCALE` (from user code) | `SX`, `SY` | `min max` | half of `SC` each, for the x or y axis, so each fits ALPHA |
+| `GBOX` | `B` | `x y` | box outline from the pen to the opposite corner x y; the pen moves there |
+| `GFBOX` | `BF` | `x y` | filled box, likewise |
+| `GCIRC` | `O` | `r` | circle outline centred on the pen (r in user x units when scaled) |
+| `GFCIRC` | `OF` | `r` | filled circle |
+| `GTEXT` | `L` | `text` | text at the pen in the pen colour; takes the rest of the line, separators included; the pen moves past it |
+| (text size) | `LS` | `n` | text scale 1 to 8 (5x7 glyphs on a 6-pixel pitch) |
+| `GPAL` | `KP` | `i r g b` | set palette entry i of the target screen |
+| (palette read) | `?P` | `i` | query: reply `r g b` |
+| (copy screen) | `CS` | `src` | copy screen src (pixels and palette) to the target |
+| (swap screens) | `SW` | `a b` | swap screens a and b (pixels and palettes) |
+| `GNEXT` | `SN` | none | show the next screen (wraps) |
+| (blit) | `BL` | `src x y w h dx dy` | copy a rectangle of indices from screen src to the target at dx dy, pixels; overlap safe |
+| (blit, convert) | `BC` | `src x y w h dx dy` | the same, but each colour maps to the nearest entry of the target palette |
+| (transparency) | `BT` | `[i]` | index i is skipped by BL, BC and IP; `BT` alone turns it off |
+| `GIMAGE` | `IL` | `name id` | load image NAME into asset slot id (0 to 31) |
+| `GSPRAY` | `IP` | `id x y` | place asset id with its top left at x y on the target |
+| (free image) | `IF` | `id` | free asset slot id |
+| (image size) | `?I` | `id` | query: reply `w h` |
 | (capabilities) | `?` | none | query: reply `version width height screens colours B<max block>`, e.g. `0 480 320 16 256 B0` (fits ALPHA) |
 | (last error) | `?E` | none | query: reply `0` or `E n text` |
 
@@ -120,7 +138,8 @@ Details fixed while implementing:
 - Errors, read by `?E` as `E n text`, cleared by reading:
   1 unknown command, 2 wrong number of arguments, 3 bad number,
   4 screen or colour out of range, 5 pixel outside the screen (`R`, `W`),
-  6 line too long, 7 bad scale (zero range).
+  6 line too long, 7 bad scale (zero range), 8 no such image file,
+  9 asset memory full, 10 no image in that slot.
   The HP-IL status byte holds the last error number (0 = none).
 - An error stops the rest of that line. Earlier commands on the line stand.
 - Default palette: 0 black, 1 white, 2 red, 3 green, 4 blue, 5 yellow,
@@ -129,4 +148,14 @@ Details fixed while implementing:
 - Scaled coordinates round to the nearest pixel. Drawing outside the screen
   is clipped silently. Only `R` and `W` report a pixel outside.
 - `GI` resets screens 0 to n-1 to index 0, all palettes to the default,
-  target and shown to 0, pen 1 at 0 0, pixel coordinates.
+  target and shown to 0, pen 1 at 0 0, pixel coordinates, text scale 1, no
+  transparent index. Loaded images stay.
+- Images (`IL`): the host finds NAME.png or NAME.bmp (Mac: the asset
+  folder, `--assets DIR`). Each pixel is quantised to the nearest entry of
+  the default palette (squared RGB distance, no dithering); alpha below 128
+  is transparent. Images are stored once and can be placed on any screen
+  any number of times. In v0 freeing only reclaims memory when the freed
+  image was the last loaded.
+- Copy policies between screens with different palettes: `BL` and `CS`
+  copy indices (the colours follow the target palette); `BC` keeps the
+  appearance by mapping each colour to the target palette's nearest entry.

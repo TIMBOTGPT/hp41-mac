@@ -2,9 +2,10 @@
  * layer v0, see docs/graphics-protocol.md).
  *
  * Plain C99. No dynamic allocation: the caller provides one block of memory
- * for all screens and palettes (gfx_mem_size), so screen count and memory
- * budget are configurable for a microcontroller. No I/O, no OS calls.
- * GPL v2 or later.
+ * for all screens and palettes (gfx_mem_size) and, optionally, a pool for
+ * image assets, so screen count and memory budget are configurable for a
+ * microcontroller. No I/O, no OS calls: loading an image file goes through
+ * a callback the host supplies. GPL v2 or later.
  */
 #ifndef GFX_H
 #define GFX_H
@@ -15,11 +16,25 @@
 #define GFX_H_DEFAULT 320
 #define GFX_REPLY 80
 #define GFX_LINE_MAX 255
+#define GFX_ASSETS 32            /* image asset slots, ids 0..31 */
+#define GFX_NAME 32
 
 enum gfx_error {
   GFX_OK = 0, GFX_E_UNKNOWN = 1, GFX_E_ARGS = 2, GFX_E_NUMBER = 3,
-  GFX_E_RANGE = 4, GFX_E_OUTSIDE = 5, GFX_E_LONG = 6, GFX_E_SCALE = 7
+  GFX_E_RANGE = 4, GFX_E_OUTSIDE = 5, GFX_E_LONG = 6, GFX_E_SCALE = 7,
+  GFX_E_FILE = 8, GFX_E_MEMORY = 9, GFX_E_ASSET = 10
 };
+
+typedef struct gfx_asset
+  {
+  uint16_t w, h;
+  uint32_t off;              /* offset in the pool: w*h indices, then the w*h-bit opacity mask */
+  uint8_t used;
+  } gfx_asset;
+
+/* host hook: load an image by name, return RGBA (8 bits each, row major) or
+ * NULL. The buffer belongs to the host and must stay valid until the next call. */
+typedef const uint8_t *(*gfx_load_fn)(void *ctx, const char *name, uint16_t *w, uint16_t *h);
 
 typedef struct gfx
   {
@@ -30,8 +45,15 @@ typedef struct gfx
   uint16_t target, shown;
   uint8_t pen;               /* pen colour index */
   int32_t px, py;            /* pen position, pixels */
-  int scaled;                /* M D P in user units */
+  int scaled;                /* M D P B IP in user units */
   float xmin, xmax, ymin, ymax;
+  uint8_t textscale;         /* text size multiplier, 1..8 */
+  int16_t transparent;       /* index skipped by blits and image placement, -1 none */
+  /* image assets */
+  gfx_asset assets[GFX_ASSETS];
+  uint8_t *pool; size_t poolsize, pooltop;
+  gfx_load_fn load; void *load_ctx;
+  /* replies and errors */
   uint8_t err;               /* last error, cleared by ?E */
   char reply[GFX_REPLY];     /* reply to the last query */
   uint16_t reply_len;
@@ -41,6 +63,7 @@ typedef struct gfx
 size_t gfx_mem_size(uint16_t w, uint16_t h, uint16_t nscreens);
 /* returns 0, or -1 if mem is too small */
 int gfx_init(gfx *g, uint16_t w, uint16_t h, uint16_t nscreens, void *mem, size_t memsize);
+void gfx_set_assets(gfx *g, void *pool, size_t size, gfx_load_fn load, void *ctx);
 void gfx_reset(gfx *g);
 
 /* one line of text commands (without the LF). Returns the error number
@@ -51,6 +74,9 @@ int gfx_line(gfx *g, const char *line, size_t len);
 void gfx_clear(gfx *g, uint8_t index);
 void gfx_plot(gfx *g, int32_t x, int32_t y, uint8_t index);   /* clipped */
 void gfx_drawline(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t index);
+void gfx_box(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int fill, uint8_t index);
+void gfx_circle(gfx *g, int32_t cx, int32_t cy, int32_t r, int fill, uint8_t index);
+void gfx_text(gfx *g, int32_t x, int32_t y, const char *s, size_t n, uint8_t index);
 int gfx_get(const gfx *g, uint16_t screen, int32_t x, int32_t y);  /* -1 outside */
 const uint8_t *gfx_screen(const gfx *g, uint16_t screen);
 const uint8_t *gfx_palette(const gfx *g, uint16_t screen);

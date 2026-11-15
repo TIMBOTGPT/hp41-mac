@@ -1,0 +1,109 @@
+# 16 screens: distinct content and palette per screen; SN cycles through all of them
+# background checked at x 479, which no line touches
+GI
+T 0:C 16:K 200:M 0 0:D 0 319:KP 16 0 0 0
+T 1:C 17:K 201:M 10 0:D 10 319:KP 17 1 2 3
+T 2:C 18:K 202:M 20 0:D 20 319:KP 18 2 4 6
+T 3:C 19:K 203:M 30 0:D 30 319:KP 19 3 6 9
+T 4:C 20:K 204:M 40 0:D 40 319:KP 20 4 8 12
+T 5:C 21:K 205:M 50 0:D 50 319:KP 21 5 10 15
+T 6:C 22:K 206:M 60 0:D 60 319:KP 22 6 12 18
+T 7:C 23:K 207:M 70 0:D 70 319:KP 23 7 14 21
+T 8:C 24:K 208:M 80 0:D 80 319:KP 24 8 16 24
+T 9:C 25:K 209:M 90 0:D 90 319:KP 25 9 18 27
+T 10:C 26:K 210:M 100 0:D 100 319:KP 26 10 20 30
+T 11:C 27:K 211:M 110 0:D 110 319:KP 27 11 22 33
+T 12:C 28:K 212:M 120 0:D 120 319:KP 28 12 24 36
+T 13:C 29:K 213:M 130 0:D 130 319:KP 29 13 26 39
+T 14:C 30:K 214:M 140 0:D 140 319:KP 30 14 28 42
+T 15:C 31:K 215:M 150 0:D 150 319:KP 31 15 30 45
+!pixel 0 479 100 16
+!pixel 0 0 100 200
+!pixel 1 479 100 17
+!pixel 1 10 100 201
+!pixel 1 479 100 17
+!pixel 2 479 100 18
+!pixel 2 20 100 202
+!pixel 2 10 100 18
+!pixel 3 479 100 19
+!pixel 3 30 100 203
+!pixel 3 20 100 19
+!pixel 4 479 100 20
+!pixel 4 40 100 204
+!pixel 4 30 100 20
+!pixel 5 479 100 21
+!pixel 5 50 100 205
+!pixel 5 40 100 21
+!pixel 6 479 100 22
+!pixel 6 60 100 206
+!pixel 6 50 100 22
+!pixel 7 479 100 23
+!pixel 7 70 100 207
+!pixel 7 60 100 23
+!pixel 8 479 100 24
+!pixel 8 80 100 208
+!pixel 8 70 100 24
+!pixel 9 479 100 25
+!pixel 9 90 100 209
+!pixel 9 80 100 25
+!pixel 10 479 100 26
+!pixel 10 100 100 210
+!pixel 10 90 100 26
+!pixel 11 479 100 27
+!pixel 11 110 100 211
+!pixel 11 100 100 27
+!pixel 12 479 100 28
+!pixel 12 120 100 212
+!pixel 12 110 100 28
+!pixel 13 479 100 29
+!pixel 13 130 100 213
+!pixel 13 120 100 29
+!pixel 14 479 100 30
+!pixel 14 140 100 214
+!pixel 14 130 100 30
+!pixel 15 479 100 31
+!pixel 15 150 100 215
+!pixel 15 140 100 31
+T 0
+!shown 0
+SN
+!shown 1
+SN
+!shown 2
+SN
+!shown 3
+SN
+!shown 4
+SN
+!shown 5
+SN
+!shown 6
+SN
+!shown 7
+SN
+!shown 8
+SN
+!shown 9
+SN
+!shown 10
+SN
+!shown 11
+SN
+!shown 12
+SN
+!shown 13
+SN
+!shown 14
+SN
+!shown 15
+SN
+!shown 0
+T 0:?P 16
+!reply 0 0 0
+T 7:?P 23
+!reply 7 14 21
+T 15:?P 31
+!reply 15 30 45
+SW 0 15
+!pixel 0 479 100 31
+!pixel 15 479 100 16

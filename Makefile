@@ -50,13 +50,14 @@ build/hp41-ildev: src/ildev/ildev.c src/ildev/ildev.h src/ildev/main.c
 
 # graphics peripheral: portable cores as strict C99, Mac wrapper with zlib for PNG
 # (window.c uses SDL2 and is built without -pedantic; the cores stay strict)
-build/hp41-gfx: src/gfx/gfx.c src/gfx/gfx.h src/gfx/main.c src/gfx/window.c src/gfx/window.h src/ildev/ildev.c src/ildev/ildev.h
+build/hp41-gfx: src/gfx/gfx.c src/gfx/gfx.h src/gfx/main.c src/gfx/window.c src/gfx/window.h src/gfx/assets.c src/gfx/assets.h src/ildev/ildev.c src/ildev/ildev.h
 	mkdir -p build
 	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror -Isrc/ildev -c src/gfx/gfx.c -o build/gfx.o
 	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror -c src/ildev/ildev.c -o build/ildev.o
 	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -pedantic -Werror -Isrc/ildev -c src/gfx/main.c -o build/gfxmain.o
 	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -Wall -Wextra -Werror $(shell sdl2-config --cflags) -c src/gfx/window.c -o build/gfxwin.o
-	clang -arch arm64 build/gfx.o build/ildev.o build/gfxmain.o build/gfxwin.o -o $@ -lz $(shell sdl2-config --libs)
+	clang -std=c99 -D_DARWIN_C_SOURCE -O2 -arch arm64 -w -c src/gfx/assets.c -o build/gfxassets.o
+	clang -arch arm64 build/gfx.o build/ildev.o build/gfxmain.o build/gfxwin.o build/gfxassets.o -o $@ -lz $(shell sdl2-config --libs)
 
 # user-code XROM (needs the focalcod/asmnut toolchain, docs/xrom.md)
 xrom: xrom/build/HP41GFX.MOD

@@ -23,12 +23,12 @@ XR="$TMP/HP41GFX.MOD"
 python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 17 --header "-HP41GFX 0A" \
   --title "HP41GFX graphics v0" > "$TMP/build.out" 2>&1 && pass "XROM built: $(sed 's/.*: //' "$TMP/build.out")" || { bad "XROM build"; cat "$TMP/build.out"; exit 1; }
 "$B/hp41-headless" --modinfo "$XR" > "$TMP/modinfo"
-names=$(grep -E '^17,(0[1-9]|1[0-2]) ' "$TMP/modinfo" | awk '{print $3}' | tr '\n' ' ')
-[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET " ] && pass "FAT: $names" || bad "FAT names [$names]"
+names=$(grep -E '^17,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^17,00' | awk '{print $3}' | tr '\n' ' ')
+[ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY " ] && pass "FAT: $names" || bad "FAT names [$names]"
 grep -q 'Correct - Same as Computed Value' "$TMP/modinfo" && pass "ROM checksum correct" || bad "ROM checksum"
 
 session() { # name, keys
-  "$B/hp41-gfx" --out 61001 --in 61000 --log "$TMP/$1.gfxlog" --png "$TMP/$1.png" --hash 1 > "$TMP/$1.gfxout" 2>&1 &
+  "$B/hp41-gfx" --out 61001 --in 61000 --assets "$HERE/assets" --log "$TMP/$1.gfxlog" --png "$TMP/$1.png" --hash 1 > "$TMP/$1.gfxout" 2>&1 &
   dev=$!
   i=0; while ! grep -q listening "$TMP/$1.gfxout" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
   "$B/hp41-headless" --mod "$MOD/NUT-CX.MOD" --mod "$MOD/HPIL.MOD" --mod "$XR" --hpil localhost:61001:61000 \
@@ -66,4 +66,15 @@ grep -q -- '-> [A-Z]' "$TMP/sine.gfxlog" && bad "protocol errors: $(grep -- '-> 
 grep -q 'NONEXISTENT\|NO HP41GFX\|TRANSMIT ERR\|DATA ERROR' "$TMP/sine.calc" && bad "calculator showed an error" || pass "no calculator error shown"
 grep -q 'XROMG.GDRAW' "$TMP/sine.calc" && pass "program steps are XROM calls (PRGM mode shows XROM \"GDRAW\")" || bad "program steps are not XROM calls"
 echo "      HP-41 emulated time $(sed -n 's/^emulated time: //p' "$TMP/sine.calc")"
+
+# the functions added after v0: box, circle, text, palette, image, spray, next screen
+F() { echo "$X $1 ALPHA"; }
+session more "ON $(F 'G R A P H') 1 0 0 ENTER 1 0 0 $(F 'G M O V E') 2 0 0 ENTER 1 5 0 $(F 'G B O X') 3 $(F 'G C O L O R') \
+2 0 $(F 'G F C I R C') ALPHA H E L L O ALPHA $(F 'G T E X T') 5 ENTER 2 5 5 ENTER 0 ENTER 0 $(F 'G P A L') \
+ALPHA S P R I T E ALPHA 0 $(F 'G I M A G E') 0 ENTER 1 0 ENTER 1 0 $(F 'G S P R A Y') $(F 'G N E X T') 1 0 ENTER 1 0 $(F 'P G E T')"
+sed -n 's/^ *[0-9.]* line \[\(.*\)\] -> .*/\1/p' "$TMP/more.gfxlog" > "$TMP/more.txt"
+printf 'GI:C 0\nM 100.0000 100.0000\nB 200.0000 150.0000\nK 3\nOF 20.0000\nL HELLO\nKP 5 255 0 0\nIL SPRITE 0\nIP 0 10.0000 10.0000\nSN\nR 10 10\n' > "$TMP/more.exp"
+cmp -s "$TMP/more.txt" "$TMP/more.exp" && pass "GBOX GCOLOR GFCIRC GTEXT GPAL GIMAGE GSPRAY GNEXT PGET send the documented lines" || { bad "new functions' traffic:"; diff "$TMP/more.exp" "$TMP/more.txt"; }
+got=$(final "$TMP/more.calc")
+[ "$got" = " 4.0000" ] && pass "PGET reads the sprayed image's blue corner pixel (4)" || bad "PGET after GSPRAY gave [$got]"
 exit $fail

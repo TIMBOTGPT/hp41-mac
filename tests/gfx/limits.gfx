@@ -1,0 +1,24 @@
+# args: --screens 2 --asset-mem 100
+# constrained configuration: only screens 0 and 1, and an asset pool too small for two 8x8 images
+GI
+?
+!reply 0 480 320 2 256 B0
+T 1
+!err 0
+T 2
+!err 4
+S 2
+!err 4
+CS 2
+!err 4
+IL SPRITE 0
+!err 0
+IL SPRITE 1
+!err 9
+?E
+!reply E 9 NO MEMORY
+IF 0
+IL SPRITE 1
+!err 0
+?I 1
+!reply 8 8

@@ -19,6 +19,15 @@
 ; GPIXEL   none                      back to pixel coordinates
 ; PSET     Z: x  Y: y  X: index      write one pixel (pixel coordinates)
 ; PGET     Y: x  X: y                read one pixel: index returned in X (stack lifts)
+; GBOX     Y: x  X: y                box outline from the pen to x y
+; GFBOX    Y: x  X: y                filled box from the pen to x y
+; GCIRC    X: radius                 circle outline centred on the pen
+; GFCIRC   X: radius                 filled circle centred on the pen
+; GTEXT    ALPHA: text (up to 22)    text at the pen in the pen colour; T is lost
+; GPAL     T: index Z: r Y: g X: b   set a palette entry of the target screen
+; GNEXT    none                      show the next screen
+; GIMAGE   ALPHA: name  X: id        load image NAME into asset slot id; T is lost
+; GSPRAY   Z: id  Y: x  X: y         place asset id with its top left at x y
  LBL "GRAPH"
  "HP41GFX"
  FINDID
@@ -101,6 +110,66 @@
  OUTA
  INA
  ANUM
+ GTO 91
+ LBL "GBOX"
+ "B "
+ GTO 80
+ LBL "GFBOX"
+ "BF "
+ GTO 80
+ LBL "GCIRC"
+ "O "
+ GTO 82
+ LBL "GFCIRC"
+ "OF "
+ LBL 82
+ FIX 4
+ ARCL X
+ OUTA
+ RTN
+ LBL "GTEXT"
+ "`L "
+ -2
+ AROT
+ RDN
+ OUTA
+ RTN
+ LBL "GPAL"
+ XEQ 90
+ "KP "
+ ARCL T
+ "` "
+ ARCL Z
+ "` "
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
+ GTO 91
+ LBL "GNEXT"
+ "SN"
+ OUTA
+ RTN
+ LBL "GIMAGE"
+ "`IL "
+ -3
+ AROT
+ RDN
+ XEQ 90
+ "` "
+ ARCL X
+ OUTA
+ GTO 91
+ LBL "GSPRAY"
+ XEQ 90
+ "IP "
+ ARCL Z
+ FIX 4
+ "` "
+ ARCL Y
+ "` "
+ ARCL X
+ OUTA
  GTO 91
  LBL 90
  FIX 0

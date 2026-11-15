@@ -7,6 +7,7 @@
  *                  !err N         the last line ended with error N (0 = none)
  *                  !pixel S X Y V screen S pixel X Y holds index V
  *                  !hash S HEX    FNV-1a 32 of screen S's indices is HEX
+ *                  !shown N       the displayed screen is N
  *                  !print S       print screen S's hash (to make a golden)
  * On the virtual HP-IL loop:
  *   hp41-gfx [--out 60001] [--in 60000] [--log FILE] [--png OUT.png] [--screens N] [--did NAME]
@@ -14,6 +15,9 @@
  *     --log writes every frame and every received line.
  * --png writes the displayed screen as an indexed-colour PNG on exit.
  * --hash 1 prints the displayed screen's FNV-1a 32 hash on exit.
+ * --assets DIR is where IL finds NAME.png or NAME.bmp (default
+ *   ~/Library/Application Support/hp41-mac/assets); --asset-mem BYTES sizes
+ *   the asset pool (default 4 MiB).
  * --window 1 [--scale N] shows the displayed screen live in a window. On the
  *   loop it keeps accepting the calculator after a disconnect; quit by
  *   closing the window. With --script it shows the result until closed.
@@ -22,6 +26,7 @@
 #include "gfx.h"
 #include "ildev.h"
 #include "window.h"
+#include "assets.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,6 +100,7 @@ static int run_script(const char *path)
     else if (sscanf(line, "!err %u", &v) == 1) { ok = (int)v == last_err; snprintf(what, sizeof what, "error %d", last_err); }
     else if (sscanf(line, "!pixel %u %u %u %u", &s, &x, &y, &v) == 4) { int got = gfx_get(&G, (uint16_t)s, (int32_t)x, (int32_t)y); ok = got == (int)v; snprintf(what, sizeof what, "pixel %d", got); }
     else if (sscanf(line, "!hash %u %lx", &s, &hx) == 2) { uint32_t h = fnv1a(gfx_screen(&G, (uint16_t)s), (size_t)G.w * G.h); ok = h == (uint32_t)hx; snprintf(what, sizeof what, "hash %08x", h); }
+    else if (sscanf(line, "!shown %u", &v) == 1) { ok = G.shown == v; snprintf(what, sizeof what, "shown %u", G.shown); }
     else if (sscanf(line, "!print %u", &s) == 1) { printf("line %d: screen %u hash %08x\n", lineno, s, fnv1a(gfx_screen(&G, (uint16_t)s), (size_t)G.w * G.h)); continue; }
     else { printf("line %d: unknown assertion %s\n", lineno, line); fail++; continue; }
     if (ok) pass++; else { fail++; printf("FAIL line %d: %s, got %s\n", lineno, line, what); }
@@ -198,7 +204,8 @@ static void *loop_thread(void *arg) { (void)arg; run_loop(g_out, g_in, g_did, 1)
 
 int main(int argc, char **argv)
   {
-  const char *script = NULL, *png = NULL, *logpath = NULL, *did = "HP41GFX";
+  const char *script = NULL, *png = NULL, *logpath = NULL, *did = "HP41GFX", *assetdir = NULL;
+  long assetmem = 4L << 20;
   int out = 60001, in = 60000, screens = 16, hash = 0, window = 0, scale = 2;
   for (int i = 1; i < argc; i += 2)
     {
@@ -213,12 +220,19 @@ int main(int argc, char **argv)
     else if (!strcmp(a, "--screens")) screens = atoi(v);
     else if (!strcmp(a, "--hash")) hash = atoi(v);
     else if (!strcmp(a, "--window")) window = atoi(v);
+    else if (!strcmp(a, "--assets")) assetdir = v;
+    else if (!strcmp(a, "--asset-mem")) assetmem = atol(v);
     else if (!strcmp(a, "--scale")) scale = atoi(v);
     else { fprintf(stderr, "unknown option %s\n", a); return 2; }
     }
   size_t need = gfx_mem_size(GFX_W_DEFAULT, GFX_H_DEFAULT, (uint16_t)screens);
   void *mem = malloc(need);                        /* the Mac host owns the memory; the core never allocates */
   if (gfx_init(&G, GFX_W_DEFAULT, GFX_H_DEFAULT, (uint16_t)screens, mem, need)) { fprintf(stderr, "gfx_init failed\n"); return 1; }
+  /* image assets: NAME.png or NAME.bmp in the asset folder, decoded on the host */
+  static char defdir[1024];
+  if (!assetdir) { snprintf(defdir, sizeof defdir, "%s/Library/Application Support/hp41-mac/assets", getenv("HOME") ? getenv("HOME") : "."); assetdir = defdir; }
+  void *pool = assetmem > 0 ? malloc((size_t)assetmem) : NULL;
+  gfx_set_assets(&G, pool, pool ? (size_t)assetmem : 0, gfx_host_load, (void *)assetdir);
   if (logpath && !(g_log = fopen(logpath, "w"))) { perror(logpath); return 1; }
   int rc = 0;
   if (script)
@@ -239,6 +253,6 @@ int main(int argc, char **argv)
   if (hash) printf("screen %u hash %08x\n", G.shown, fnv1a(gfx_screen(&G, G.shown), (size_t)G.w * G.h));
   if (png && write_png(png, G.shown) == 0) printf("wrote %s (screen %u)\n", png, G.shown);
   if (g_log) fclose(g_log);
-  free(mem);
+  free(mem); free(pool);
   return rc;
   }

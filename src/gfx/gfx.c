@@ -1,7 +1,37 @@
-/* hp41-mac: portable graphics peripheral core. See gfx.h. GPL v2 or later. */
+/* hp41-mac: portable graphics peripheral core. See gfx.h. GPL v2 or later.
+ * Box, circle and the 5x7 font follow emu71-mac's src/video.c (same owner,
+ * GPL v2). The font is the widely circulated 5x7 ASCII table; its original
+ * source is not recorded there. */
 #include "gfx.h"
 #include <string.h>
 #include <stdio.h>
+
+static const unsigned char font5x7[95][5] = {
+{0x00,0x00,0x00,0x00,0x00},{0x00,0x00,0x5F,0x00,0x00},{0x00,0x07,0x00,0x07,0x00},{0x14,0x7F,0x14,0x7F,0x14},
+{0x24,0x2A,0x7F,0x2A,0x12},{0x23,0x13,0x08,0x64,0x62},{0x36,0x49,0x56,0x20,0x50},{0x00,0x05,0x03,0x00,0x00},
+{0x00,0x1C,0x22,0x41,0x00},{0x00,0x41,0x22,0x1C,0x00},{0x2A,0x1C,0x7F,0x1C,0x2A},{0x08,0x08,0x3E,0x08,0x08},
+{0x00,0x50,0x30,0x00,0x00},{0x08,0x08,0x08,0x08,0x08},{0x00,0x60,0x60,0x00,0x00},{0x20,0x10,0x08,0x04,0x02},
+{0x3E,0x51,0x49,0x45,0x3E},{0x00,0x42,0x7F,0x40,0x00},{0x42,0x61,0x51,0x49,0x46},{0x21,0x41,0x45,0x4B,0x31},
+{0x18,0x14,0x12,0x7F,0x10},{0x27,0x45,0x45,0x45,0x39},{0x3C,0x4A,0x49,0x49,0x30},{0x01,0x71,0x09,0x05,0x03},
+{0x36,0x49,0x49,0x49,0x36},{0x06,0x49,0x49,0x29,0x1E},{0x00,0x36,0x36,0x00,0x00},{0x00,0x56,0x36,0x00,0x00},
+{0x08,0x14,0x22,0x41,0x00},{0x14,0x14,0x14,0x14,0x14},{0x00,0x41,0x22,0x14,0x08},{0x02,0x01,0x51,0x09,0x06},
+{0x32,0x49,0x79,0x41,0x3E},{0x7E,0x11,0x11,0x11,0x7E},{0x7F,0x49,0x49,0x49,0x36},{0x3E,0x41,0x41,0x41,0x22},
+{0x7F,0x41,0x41,0x22,0x1C},{0x7F,0x49,0x49,0x49,0x41},{0x7F,0x09,0x09,0x09,0x01},{0x3E,0x41,0x49,0x49,0x7A},
+{0x7F,0x08,0x08,0x08,0x7F},{0x00,0x41,0x7F,0x41,0x00},{0x20,0x40,0x41,0x3F,0x01},{0x7F,0x08,0x14,0x22,0x41},
+{0x7F,0x40,0x40,0x40,0x40},{0x7F,0x02,0x0C,0x02,0x7F},{0x7F,0x04,0x08,0x10,0x7F},{0x3E,0x41,0x41,0x41,0x3E},
+{0x7F,0x09,0x09,0x09,0x06},{0x3E,0x41,0x51,0x21,0x5E},{0x7F,0x09,0x19,0x29,0x46},{0x46,0x49,0x49,0x49,0x31},
+{0x01,0x01,0x7F,0x01,0x01},{0x3F,0x40,0x40,0x40,0x3F},{0x1F,0x20,0x40,0x20,0x1F},{0x3F,0x40,0x38,0x40,0x3F},
+{0x63,0x14,0x08,0x14,0x63},{0x07,0x08,0x70,0x08,0x07},{0x61,0x51,0x49,0x45,0x43},{0x00,0x7F,0x41,0x41,0x00},
+{0x02,0x04,0x08,0x10,0x20},{0x00,0x41,0x41,0x7F,0x00},{0x04,0x02,0x01,0x02,0x04},{0x40,0x40,0x40,0x40,0x40},
+{0x00,0x01,0x02,0x04,0x00},{0x20,0x54,0x54,0x54,0x78},{0x7F,0x48,0x44,0x44,0x38},{0x38,0x44,0x44,0x44,0x20},
+{0x38,0x44,0x44,0x48,0x7F},{0x38,0x54,0x54,0x54,0x18},{0x08,0x7E,0x09,0x01,0x02},{0x0C,0x52,0x52,0x52,0x3E},
+{0x7F,0x08,0x04,0x04,0x78},{0x00,0x44,0x7D,0x40,0x00},{0x20,0x40,0x44,0x3D,0x00},{0x7F,0x10,0x28,0x44,0x00},
+{0x00,0x41,0x7F,0x40,0x00},{0x7C,0x04,0x18,0x04,0x78},{0x7C,0x08,0x04,0x04,0x78},{0x38,0x44,0x44,0x44,0x38},
+{0x7C,0x14,0x14,0x14,0x08},{0x08,0x14,0x14,0x18,0x7C},{0x7C,0x08,0x04,0x04,0x08},{0x48,0x54,0x54,0x54,0x20},
+{0x04,0x3F,0x44,0x40,0x20},{0x3C,0x40,0x40,0x20,0x7C},{0x1C,0x20,0x40,0x20,0x1C},{0x3C,0x40,0x30,0x40,0x3C},
+{0x44,0x28,0x10,0x28,0x44},{0x0C,0x50,0x50,0x50,0x3C},{0x44,0x64,0x54,0x4C,0x44},{0x00,0x08,0x36,0x41,0x00},
+{0x00,0x00,0x7F,0x00,0x00},{0x00,0x41,0x36,0x08,0x00},{0x08,0x04,0x08,0x10,0x08}
+};
 
 size_t gfx_mem_size(uint16_t w, uint16_t h, uint16_t n)
   {
@@ -21,6 +51,18 @@ static void default_palette(uint8_t *p)
   for (int k = 0; k < 24; k++, i++) { uint8_t v = (uint8_t)(8 + k * 10); p[i*3] = p[i*3+1] = p[i*3+2] = v; }
   }
 
+/* nearest palette entry by squared RGB distance; ties go to the lower index */
+static uint8_t nearest(const uint8_t *pal, uint8_t r, uint8_t gg, uint8_t b)
+  {
+  int best = 0; long bd = 1L << 30;
+  for (int i = 0; i < 256; i++)
+    {
+    long dr = pal[i*3] - r, dg = pal[i*3+1] - gg, db = pal[i*3+2] - b, d = dr*dr + dg*dg + db*db;
+    if (d < bd) { bd = d; best = i; if (!d) break; }
+    }
+  return (uint8_t)best;
+  }
+
 void gfx_reset(gfx *g)
   {
   memset(g->pix, 0, (size_t)g->nscreens * g->w * g->h);
@@ -29,6 +71,7 @@ void gfx_reset(gfx *g)
   g->pen = 1; g->px = g->py = 0;
   g->scaled = 0;
   g->xmin = 0; g->xmax = (float)(g->w - 1); g->ymin = 0; g->ymax = (float)(g->h - 1);
+  g->textscale = 1; g->transparent = -1;
   g->err = 0; g->reply_len = 0; g->reply[0] = 0;
   }
 
@@ -43,7 +86,15 @@ int gfx_init(gfx *g, uint16_t w, uint16_t h, uint16_t n, void *mem, size_t memsi
   return 0;
   }
 
+void gfx_set_assets(gfx *g, void *pool, size_t size, gfx_load_fn load, void *ctx)
+  {
+  g->pool = (uint8_t *)pool; g->poolsize = pool ? size : 0; g->pooltop = 0;
+  g->load = load; g->load_ctx = ctx;
+  memset(g->assets, 0, sizeof g->assets);
+  }
+
 static uint8_t *scr(gfx *g, uint16_t s) { return g->pix + (size_t)s * g->w * g->h; }
+static uint8_t *palp(gfx *g, uint16_t s) { return g->pal + (size_t)s * 768; }
 const uint8_t *gfx_screen(const gfx *g, uint16_t s) { return g->pix + (size_t)s * g->w * g->h; }
 const uint8_t *gfx_palette(const gfx *g, uint16_t s) { return g->pal + (size_t)s * 768; }
 
@@ -61,8 +112,7 @@ int gfx_get(const gfx *g, uint16_t s, int32_t x, int32_t y)
   return gfx_screen(g, s)[(size_t)y * g->w + x];
   }
 
-/* Bresenham, every point clipped. Lines far outside the screen are rare
- * here, so no segment clipping yet. */
+/* Bresenham, every point clipped */
 void gfx_drawline(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t index)
   {
   int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, sx = x0 < x1 ? 1 : -1;
@@ -78,10 +128,134 @@ void gfx_drawline(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_
     }
   }
 
+static void hline(gfx *g, int32_t x0, int32_t x1, int32_t y, uint8_t c)
+  {
+  if (y < 0 || y >= g->h) return;
+  if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+  if (x0 < 0) x0 = 0;
+  if (x1 >= g->w) x1 = g->w - 1;
+  if (x0 > x1) return;
+  memset(scr(g, g->target) + (size_t)y * g->w + x0, c, (size_t)(x1 - x0 + 1));
+  }
+
+void gfx_box(gfx *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int fill, uint8_t c)
+  {
+  if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+  if (y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
+  if (fill) { for (int32_t y = y0 < 0 ? 0 : y0; y <= y1 && y < g->h; y++) hline(g, x0, x1, y, c); return; }
+  hline(g, x0, x1, y0, c); hline(g, x0, x1, y1, c);
+  gfx_drawline(g, x0, y0, x0, y1, c); gfx_drawline(g, x1, y0, x1, y1, c);
+  }
+
+/* midpoint circle */
+void gfx_circle(gfx *g, int32_t cx, int32_t cy, int32_t r, int fill, uint8_t c)
+  {
+  if (r < 0 || r > 20000) return;
+  int32_t x = r, y = 0, err = 1 - r;
+  while (x >= y)
+    {
+    if (fill) { hline(g, cx - x, cx + x, cy + y, c); hline(g, cx - x, cx + x, cy - y, c);
+                hline(g, cx - y, cx + y, cy + x, c); hline(g, cx - y, cx + y, cy - x, c); }
+    else { gfx_plot(g, cx + x, cy + y, c); gfx_plot(g, cx - x, cy + y, c); gfx_plot(g, cx + x, cy - y, c); gfx_plot(g, cx - x, cy - y, c);
+           gfx_plot(g, cx + y, cy + x, c); gfx_plot(g, cx - y, cy + x, c); gfx_plot(g, cx + y, cy - x, c); gfx_plot(g, cx - y, cy - x, c); }
+    y++;
+    if (err < 0) err += 2 * y + 1; else { x--; err += 2 * (y - x) + 1; }
+    }
+  }
+
+/* 5x7 glyphs on a 6-pixel pitch, top left at x y, each font pixel s x s */
+void gfx_text(gfx *g, int32_t x, int32_t y, const char *str, size_t n, uint8_t c)
+  {
+  int s = g->textscale;
+  for (size_t i = 0; i < n; i++, x += 6 * s)
+    {
+    int ch = (unsigned char)str[i];
+    if (ch < 32 || ch > 126) ch = '?';
+    for (int col = 0; col < 5; col++)
+      for (int row = 0; row < 7; row++)
+        if (font5x7[ch - 32][col] & (1 << row))
+          for (int a = 0; a < s; a++) for (int b = 0; b < s; b++) gfx_plot(g, x + col * s + a, y + row * s + b, c);
+    }
+  }
+
 const char *gfx_error_text(int e)
   {
-  static const char *t[] = { "OK", "UNKNOWN CMD", "ARG COUNT", "BAD NUMBER", "RANGE", "OUTSIDE", "TOO LONG", "BAD SCALE" };
-  return (e >= 0 && e <= 7) ? t[e] : "?";
+  static const char *t[] = { "OK", "UNKNOWN CMD", "ARG COUNT", "BAD NUMBER", "RANGE", "OUTSIDE", "TOO LONG",
+                             "BAD SCALE", "NO FILE", "NO MEMORY", "NO ASSET" };
+  return (e >= 0 && e <= 10) ? t[e] : "?";
+  }
+
+/* ---- screens and blits ---- */
+
+static void copy_rect(gfx *g, uint16_t src, int32_t sx, int32_t sy, int32_t w, int32_t h, int32_t dx, int32_t dy, int convert)
+  {
+  uint8_t map[256];
+  for (int i = 0; i < 256; i++) map[i] = (uint8_t)i;
+  if (convert)
+    {
+    const uint8_t *sp = palp(g, src), *tp = palp(g, g->target);
+    for (int i = 0; i < 256; i++) map[i] = nearest(tp, sp[i*3], sp[i*3+1], sp[i*3+2]);
+    }
+  const uint8_t *s = scr(g, src); uint8_t *d = scr(g, g->target);
+  /* walk in the order that is safe when source and target overlap */
+  int up = !(src == g->target && dy > sy), left = !(src == g->target && dy == sy && dx > sx);
+  for (int32_t jj = 0; jj < h; jj++)
+    {
+    int32_t j = up ? jj : h - 1 - jj;
+    int32_t ys = sy + j, yd = dy + j;
+    if (ys < 0 || ys >= g->h || yd < 0 || yd >= g->h) continue;
+    for (int32_t ii = 0; ii < w; ii++)
+      {
+      int32_t i = left ? ii : w - 1 - ii;
+      int32_t xs = sx + i, xd = dx + i;
+      if (xs < 0 || xs >= g->w || xd < 0 || xd >= g->w) continue;
+      uint8_t v = s[(size_t)ys * g->w + xs];
+      if (g->transparent >= 0 && v == g->transparent) continue;
+      d[(size_t)yd * g->w + xd] = map[v];
+      }
+    }
+  }
+
+/* ---- image assets ---- */
+
+static int asset_load(gfx *g, int id, const char *name)
+  {
+  if (!g->load) return GFX_E_FILE;
+  uint16_t w = 0, h = 0;
+  const uint8_t *rgba = g->load(g->load_ctx, name, &w, &h);
+  if (!rgba || !w || !h) return GFX_E_FILE;
+  gfx_asset *a = &g->assets[id];
+  if (a->used) { if (a->off + (size_t)a->w * a->h + ((size_t)a->w * a->h + 7) / 8 == g->pooltop) g->pooltop = a->off; a->used = 0; }
+  size_t n = (size_t)w * h, need = n + (n + 7) / 8;
+  if (g->pooltop + need > g->poolsize) return GFX_E_MEMORY;
+  uint8_t defpal[768]; default_palette(defpal);
+  uint8_t *ix = g->pool + g->pooltop, *mask = ix + n;
+  memset(mask, 0, (n + 7) / 8);
+  uint32_t last = 0xFFFFFFFF; uint8_t lastix = 0;
+  for (size_t i = 0; i < n; i++)
+    {
+    const uint8_t *p = rgba + 4 * i;
+    uint32_t key = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+    if (key != last) { lastix = nearest(defpal, p[0], p[1], p[2]); last = key; }
+    ix[i] = lastix;
+    if (p[3] >= 128) mask[i / 8] |= (uint8_t)(1 << (i % 8));
+    }
+  a->w = w; a->h = h; a->off = (uint32_t)g->pooltop; a->used = 1;
+  g->pooltop += need;
+  return GFX_OK;
+  }
+
+static void asset_place(gfx *g, const gfx_asset *a, int32_t x0, int32_t y0)
+  {
+  const uint8_t *ix = g->pool + a->off, *mask = ix + (size_t)a->w * a->h;
+  for (int32_t y = 0; y < a->h; y++)
+    for (int32_t x = 0; x < a->w; x++)
+      {
+      size_t i = (size_t)y * a->w + x;
+      if (!(mask[i / 8] & (1 << (i % 8)))) continue;
+      if (g->transparent >= 0 && ix[i] == g->transparent) continue;
+      gfx_plot(g, x0 + x, y0 + y, ix[i]);
+      }
   }
 
 /* ---- parser ---- */
@@ -118,6 +292,13 @@ static void to_pixel(const gfx *g, float x, float y, int32_t *px, int32_t *py)
   *py = iround((g->ymax - y) * (float)(g->h - 1) / (g->ymax - g->ymin));
   }
 
+static int32_t to_pixel_len(const gfx *g, float r)
+  {
+  if (!g->scaled) return iround(r);
+  float k = (float)(g->w - 1) / (g->xmax - g->xmin);
+  return iround(r * (k < 0 ? -k : k));
+  }
+
 static int as_index(float f, int max, int *out)
   {
   int32_t v = iround(f);
@@ -132,6 +313,8 @@ static void reply(gfx *g, const char *s)
   memcpy(g->reply, s, n); g->reply[n] = 0; g->reply_len = (uint16_t)n;
   }
 
+#define MAXARGS 8
+
 /* one command, already split off from the line */
 static int command(gfx *g, const char *c, size_t n)
   {
@@ -139,39 +322,74 @@ static int command(gfx *g, const char *c, size_t n)
   while (i < n && c[i] == ' ') i++;
   char m[4] = {0, 0, 0, 0}; int ml = 0;
   while (i < n && c[i] != ' ' && ml < 3) m[ml++] = c[i++];
-  if (ml == 0) return GFX_OK;                       /* empty command, e.g. trailing ; */
+  if (ml == 0) return GFX_OK;                       /* empty command, e.g. trailing : */
   if (ml > 2 || (i < n && c[i] != ' ')) return GFX_E_UNKNOWN;
-  float a[5]; int na = 0;
+  #define IS(s) (!strcmp(m, s))
+  static const char *known[] = { "GI","C","K","T","S","M","D","P","W","R","SC","SX","SY","SP","?","?E",
+                                 "B","BF","O","OF","L","LS","KP","?P","CS","SW","SN","BL","BC","BT",
+                                 "IL","IP","IF","?I", NULL };
+  int ok = 0;
+  for (int q = 0; known[q]; q++) if (IS(known[q])) { ok = 1; break; }
+  if (!ok) return GFX_E_UNKNOWN;
+  g->commands++;
+  if (IS("L"))                                      /* text: the rest of the line, as given */
+    {
+    if (i < n && c[i] == ' ') i++;
+    gfx_text(g, g->px, g->py, c + i, n - i, g->pen);
+    g->px += (int32_t)(n - i) * 6 * g->textscale;
+    return GFX_OK;
+    }
+  char name[GFX_NAME] = "";
+  if (IS("IL"))                                     /* IL name id: the first argument is a name */
+    {
+    while (i < n && c[i] == ' ') i++;
+    size_t s0 = i, nl = 0;
+    while (i < n && c[i] != ' ')
+      {
+      char ch = c[i++];
+      if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-')) return GFX_E_FILE;
+      if (nl < GFX_NAME - 1) name[nl++] = ch; else return GFX_E_FILE;
+      }
+    name[nl] = 0;
+    if (i == s0) return GFX_E_ARGS;
+    }
+  float a[MAXARGS]; int na = 0;
   while (i < n)
     {
     while (i < n && c[i] == ' ') i++;
     if (i >= n) break;
     size_t s0 = i;
     while (i < n && c[i] != ' ') i++;
-    if (na == 5) return GFX_E_ARGS;
+    if (na == MAXARGS) return GFX_E_ARGS;
     if (parse_number(c + s0, i - s0, &a[na++])) return GFX_E_NUMBER;
     }
-  int k;
+  int k, k2;
   #define NEED(lo, hi) do { if (na < (lo) || na > (hi)) return GFX_E_ARGS; } while (0)
-  #define IS(s) (!strcmp(m, s))
-  if (!(IS("GI") || IS("C") || IS("K") || IS("T") || IS("S") || IS("M") || IS("D") || IS("P") ||
-        IS("W") || IS("R") || IS("SC") || IS("SX") || IS("SY") || IS("SP") || IS("?") || IS("?E")))
-    return GFX_E_UNKNOWN;
-  g->commands++;
+  #define SCREEN(f, out) do { if (as_index(f, g->nscreens - 1, &(out))) return GFX_E_RANGE; } while (0)
   if (IS("GI")) { NEED(0, 0); gfx_reset(g); return GFX_OK; }
   if (IS("C")) { NEED(0, 1); k = 0; if (na && as_index(a[0], 255, &k)) return GFX_E_RANGE; gfx_clear(g, (uint8_t)k); return GFX_OK; }
   if (IS("K")) { NEED(1, 1); if (as_index(a[0], 255, &k)) return GFX_E_RANGE; g->pen = (uint8_t)k; return GFX_OK; }
-  if (IS("T")) { NEED(1, 1); if (as_index(a[0], g->nscreens - 1, &k)) return GFX_E_RANGE; g->target = (uint16_t)k; return GFX_OK; }
-  if (IS("S")) { NEED(1, 1); if (as_index(a[0], g->nscreens - 1, &k)) return GFX_E_RANGE; g->shown = (uint16_t)k; return GFX_OK; }
-  if (IS("M") || IS("D") || IS("P"))
+  if (IS("T")) { NEED(1, 1); SCREEN(a[0], k); g->target = (uint16_t)k; return GFX_OK; }
+  if (IS("S")) { NEED(1, 1); SCREEN(a[0], k); g->shown = (uint16_t)k; return GFX_OK; }
+  if (IS("SN")) { NEED(0, 0); g->shown = (uint16_t)((g->shown + 1) % g->nscreens); return GFX_OK; }
+  if (IS("M") || IS("D") || IS("P") || IS("B") || IS("BF"))
     {
     NEED(2, 2);
     int32_t x, y; to_pixel(g, a[0], a[1], &x, &y);
-    if (m[0] == 'D') gfx_drawline(g, g->px, g->py, x, y, g->pen);
-    else if (m[0] == 'P') gfx_plot(g, x, y, g->pen);
+    if (IS("D")) gfx_drawline(g, g->px, g->py, x, y, g->pen);
+    else if (IS("P")) gfx_plot(g, x, y, g->pen);
+    else if (m[0] == 'B') gfx_box(g, g->px, g->py, x, y, m[1] == 'F', g->pen);
     g->px = x; g->py = y;
     return GFX_OK;
     }
+  if (IS("O") || IS("OF"))
+    {
+    NEED(1, 1);
+    int32_t r = to_pixel_len(g, a[0]);
+    if (r < 0) return GFX_E_RANGE;
+    gfx_circle(g, g->px, g->py, r, m[1] == 'F', g->pen); return GFX_OK;
+    }
+  if (IS("LS")) { NEED(1, 1); if (as_index(a[0], 8, &k) || k < 1) return GFX_E_RANGE; g->textscale = (uint8_t)k; return GFX_OK; }
   if (IS("W") || IS("R"))
     {
     NEED(m[0] == 'W' ? 3 : 2, m[0] == 'W' ? 3 : 2);
@@ -183,6 +401,76 @@ static int command(gfx *g, const char *c, size_t n)
       gfx_plot(g, x, y, (uint8_t)k); return GFX_OK;
       }
     char b[8]; snprintf(b, sizeof b, "%d", gfx_get(g, g->target, x, y)); reply(g, b); return GFX_OK;
+    }
+  if (IS("KP"))
+    {
+    NEED(4, 4);
+    int r, gg, b;
+    if (as_index(a[0], 255, &k) || as_index(a[1], 255, &r) || as_index(a[2], 255, &gg) || as_index(a[3], 255, &b)) return GFX_E_RANGE;
+    uint8_t *p = palp(g, g->target) + 3 * k; p[0] = (uint8_t)r; p[1] = (uint8_t)gg; p[2] = (uint8_t)b;
+    return GFX_OK;
+    }
+  if (IS("?P"))
+    {
+    NEED(1, 1); if (as_index(a[0], 255, &k)) return GFX_E_RANGE;
+    const uint8_t *p = palp(g, g->target) + 3 * k;
+    char b[16]; snprintf(b, sizeof b, "%u %u %u", p[0], p[1], p[2]); reply(g, b); return GFX_OK;
+    }
+  if (IS("CS"))
+    {
+    NEED(1, 1); SCREEN(a[0], k);
+    if (k != g->target)
+      {
+      memcpy(scr(g, g->target), scr(g, (uint16_t)k), (size_t)g->w * g->h);
+      memcpy(palp(g, g->target), palp(g, (uint16_t)k), 768);
+      }
+    return GFX_OK;
+    }
+  if (IS("SW"))
+    {
+    NEED(2, 2); SCREEN(a[0], k); SCREEN(a[1], k2);
+    if (k != k2)
+      {
+      uint8_t *p = scr(g, (uint16_t)k), *q = scr(g, (uint16_t)k2);
+      for (size_t z = 0, zn = (size_t)g->w * g->h; z < zn; z++) { uint8_t t = p[z]; p[z] = q[z]; q[z] = t; }
+      p = palp(g, (uint16_t)k); q = palp(g, (uint16_t)k2);
+      for (size_t z = 0; z < 768; z++) { uint8_t t = p[z]; p[z] = q[z]; q[z] = t; }
+      }
+    return GFX_OK;
+    }
+  if (IS("BL") || IS("BC"))                         /* BL src x y w h dx dy, pixels */
+    {
+    NEED(7, 7); SCREEN(a[0], k);
+    int32_t v[6];
+    for (int q = 0; q < 6; q++) { v[q] = iround(a[q + 1]); if ((float)v[q] - a[q + 1] > 0.001f || a[q + 1] - (float)v[q] > 0.001f) return GFX_E_NUMBER; }
+    if (v[2] < 0 || v[3] < 0) return GFX_E_RANGE;
+    copy_rect(g, (uint16_t)k, v[0], v[1], v[2], v[3], v[4], v[5], m[1] == 'C');
+    return GFX_OK;
+    }
+  if (IS("BT"))
+    {
+    NEED(0, 1);
+    if (!na) { g->transparent = -1; return GFX_OK; }
+    if (as_index(a[0], 255, &k)) return GFX_E_RANGE;
+    g->transparent = (int16_t)k; return GFX_OK;
+    }
+  if (IS("IL")) { NEED(1, 1); if (as_index(a[0], GFX_ASSETS - 1, &k)) return GFX_E_RANGE; return asset_load(g, k, name); }
+  if (IS("IP"))
+    {
+    NEED(3, 3); if (as_index(a[0], GFX_ASSETS - 1, &k)) return GFX_E_RANGE;
+    if (!g->assets[k].used) return GFX_E_ASSET;
+    int32_t x, y; to_pixel(g, a[1], a[2], &x, &y);
+    asset_place(g, &g->assets[k], x, y); return GFX_OK;
+    }
+  if (IS("IF") || IS("?I"))
+    {
+    NEED(1, 1); if (as_index(a[0], GFX_ASSETS - 1, &k)) return GFX_E_RANGE;
+    gfx_asset *as = &g->assets[k];
+    if (!as->used) return GFX_E_ASSET;
+    if (m[0] == '?') { char b[24]; snprintf(b, sizeof b, "%u %u", as->w, as->h); reply(g, b); return GFX_OK; }
+    size_t sz = (size_t)as->w * as->h, need = sz + (sz + 7) / 8;
+    if (as->off + need == g->pooltop) g->pooltop = as->off;   /* only the newest frees space (v0) */
+    as->used = 0; return GFX_OK;
     }
   if (IS("SC"))
     {
@@ -210,6 +498,7 @@ static int command(gfx *g, const char *c, size_t n)
   if (g->err) snprintf(b, sizeof b, "E %d %s", g->err, gfx_error_text(g->err)); else snprintf(b, sizeof b, "0");
   reply(g, b); g->err = 0; return GFX_OK;
   #undef NEED
+  #undef SCREEN
   #undef IS
   }
 
@@ -220,11 +509,16 @@ int gfx_line(gfx *g, const char *line, size_t len)
   if (len > GFX_LINE_MAX) { g->err = GFX_E_LONG; return g->err; }
   size_t s = 0;
   for (size_t i = 0; i <= len; i++)
+    {
+    /* L takes the rest of the line as text, separators included */
+    size_t t = s; while (t < len && line[t] == ' ') t++;
+    if (t < len && line[t] == 'L' && (t + 1 == len || line[t + 1] == ' ')) i = len;
     if (i == len || line[i] == ':' || line[i] == ';')    /* ':' is typable on the HP-41 */
       {
       int e = command(g, line + s, i - s);
       if (e) { g->err = (uint8_t)e; return e; }
       s = i + 1;
       }
+    }
   return 0;
   }
