@@ -20,10 +20,10 @@ bad()  { echo "FAIL  $1"; fail=1; }
 X="XEQ ALPHA"
 XR="$TMP/HP41GFX.MOD"
 
-python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 17 --header "-HP41GFX 0A" \
+python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 8 --header "-HP41GFX 0A" --romid GF-0A \
   --title "HP41GFX graphics v0" > "$TMP/build.out" 2>&1 && pass "XROM built: $(sed 's/.*: //' "$TMP/build.out")" || { bad "XROM build"; cat "$TMP/build.out"; exit 1; }
 "$B/hp41-headless" --modinfo "$XR" > "$TMP/modinfo"
-names=$(grep -E '^17,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^17,00' | awk '{print $3}' | tr '\n' ' ')
+names=$(grep -E '^08,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^08,00' | awk '{print $3}' | tr '\n' ' ')
 [ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY GSAVE GLOAD GAXES GGRID GVERT GPFILL GPOLY " ] && pass "FAT: $names" || bad "FAT names [$names]"
 grep -q 'Correct - Same as Computed Value' "$TMP/modinfo" && pass "ROM checksum correct" || bad "ROM checksum"
 

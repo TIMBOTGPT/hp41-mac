@@ -64,7 +64,7 @@ build/hp41-gfx: src/gfx/gfx.c src/gfx/gfx.h src/gfx/session.c src/gfx/session.h 
 xrom: xrom/build/HP41GFX.MOD
 xrom/build/HP41GFX.MOD: xrom/src/hp41gfx.focal tools/build_xrom.py
 	mkdir -p xrom/build
-	python3 tools/build_xrom.py xrom/src/hp41gfx.focal $@ --xrom 17 --header "-HP41GFX 0A" \
+	python3 tools/build_xrom.py xrom/src/hp41gfx.focal $@ --xrom 8 --header "-HP41GFX 0A" --romid GF-0A \
 	  --title "HP41GFX graphics v0" --listing xrom/build/hp41gfx.lst
 
 clean:

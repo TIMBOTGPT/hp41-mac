@@ -31,6 +31,7 @@ ap.add_argument("--xrom", type=int, required=True)
 ap.add_argument("--header", required=True)
 ap.add_argument("--title", default="")
 ap.add_argument("--version", default="")
+ap.add_argument("--romid", default="", help="ROM identifier, asmnut form xy-zt, e.g. GF-0A")
 ap.add_argument("--xrm", action="append", default=["ILMODULE-1H.XRM", "XFUNS3-2D.XRM"])
 ap.add_argument("--listing")
 a = ap.parse_args()
@@ -135,7 +136,9 @@ for i, w in enumerate(words):
     if i in label_at:
         src.append("(U%02d)" % label_at[i])      # own line: asmnut drops a word after a label in .UCODE
     src.append("#%03X" % w)
-src += [".MCODE", ".END"]
+src += [".MCODE"]
+if a.romid: src.append(".ROMID %s" % a.romid)
+src += [".END"]
 
 with tempfile.TemporaryDirectory() as td:
     base = os.path.join(td, "XROM")

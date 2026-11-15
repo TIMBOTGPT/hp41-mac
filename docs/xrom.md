@@ -30,7 +30,7 @@ extracted correctly.)
 Build by hand:
 
     python3 tools/build_xrom.py xrom/src/hp41gfx.focal xrom/build/HP41GFX.MOD \
-      --xrom 17 --header "-HP41GFX 0A" --title "HP41GFX graphics v0" \
+      --xrom 8 --header "-HP41GFX 0A" --title "HP41GFX graphics v0" \
       --listing xrom/build/hp41gfx.lst
 
 ## User code in ROM
@@ -58,8 +58,18 @@ HP's Math Pac and Stat Pac ROMs (local reads only, nothing committed):
 
 ## Functions
 
-XROM 17 (provisional, not checked against other modules), 28 functions, header
-`-HP41GFX 0A`. Arguments follow keying order.
+XROM 8, ROM ID `GF0A`, 28 functions, header `-HP41GFX 0A`. Arguments follow
+keying order.
+
+XROM numbers 1 to 31 are all taken by some HP or third-party module. The
+first build used 17, which is the 82184A Plotter module, the most likely
+clash for a graphics user. 8 is the Stress Pac (SKWIDBC), which is rare and
+unlikely to be plugged in alongside. If it is, change `--xrom` and rebuild;
+programs keyed with the old number must be keyed again.
+
+`COPY` works on the ROM. In the emulator `COPY "GRAPH"` took free memory from
+219 to 127 registers (92 registers, the whole ROM's user code), and RAM copies
+of `GRAPH`, `GCOLOR`, `PSET` and `PGET` ran correctly.
 
 | Function | Stack in | Sends | Stack out |
 | --- | --- | --- | --- |
@@ -94,7 +104,7 @@ XROM 17 (provisional, not checked against other modules), 28 functions, header
 
 The FAT follows the order of the global labels in the source, so new
 functions are only ever added at the end: reordering would renumber
-XROM 17,nn and break programs already keyed in. `tests/xrom.sh` checks the
+XROM 8,nn and break programs already keyed in. `tests/xrom.sh` checks the
 whole list in order.
 
 `GTEXT`, `GSAVE`, `GLOAD` and `GIMAGE` put the command in front of ALPHA by appending it and

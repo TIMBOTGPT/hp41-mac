@@ -64,7 +64,8 @@ Built and observed working:
     HP-IL device on `src/ildev` (`--out/--in`), and writes indexed PNGs.
   - `tests/e2e_sine.sh` (3): keyed-in FOCAL with `OUTA` draws axes and a
     sine curve, traffic equals the golden script, image hash matches.
-  - User-code XROM `HP41GFX` (XROM 17, 12 functions), built with
+  - User-code XROM `HP41GFX` (now XROM 8, ROM ID GF0A, 28 functions; was
+    XROM 17, which clashes with the Plotter module), built with
     focalcod + asmnut + `tools/build_xrom.py` (`docs/xrom.md`).
     `tests/xrom.sh` (9): a program of XROM calls draws the same image,
     pixel identical; `PSET`/`PGET` round trip.
@@ -123,9 +124,10 @@ Not done or not verified:
 1. Microcode XROM functions: a block sender (address once, stream bytes
    from registers or extended memory, the per-byte cost of the HP-IL ROM
    loop, expected about 150 to 200 bytes/s at stock speed) and display
-   format save/restore. Research first: HP-IL module entry points or
-   driving the HP-IL chip registers directly (docs in the hp41.org
-   Internal Documentation folder). Smaller: asset memory compaction on free, saving the asset
+   format save/restore. Research done (`docs/microcode-research.md`): the
+   XROM's FOCAL formatting (0.55 s per call) costs more than the transfer
+   (0.17 s); recommended route is microcode driving the chip directly,
+   unless the HP-IL module listing turns up. Smaller: asset memory compaction on free, saving the asset
    store, palette import with images, dithering option. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
