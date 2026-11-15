@@ -24,7 +24,7 @@ has and has not been verified.
 | 0 | Inspect candidate engines, build one, choose with evidence | V41 R9O chosen on build evidence |
 | 1 | Working, stateful HP-41CX on arm64 that runs a stock XROM | acceptance tests pass (headless) |
 | 2 | Simulated HP-IL loop with a virtual test peripheral | loop, test device, error cases, replay and throughput done in emulation |
-| 3 | Graphics protocol and XROM | text protocol v0, peripheral core and user-code XROM working; bulk layer and microcode XROM to do |
+| 3 | Graphics protocol and XROM | text protocol v0, bulk blocks, peripheral core and XROM working (18 drawing functions in microcode); microcode bulk sender to do |
 | 4 | 480x320 indexed-colour multi-screen peripheral on the Mac | not started |
 
 ## Documents

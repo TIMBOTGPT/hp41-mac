@@ -1,0 +1,283 @@
+; HP41GFX microcode functions (asmnut, Zencode mnemonics).
+; tools/build_xrom.py appends this after the user code. A label (NAME) here
+; whose NAME is a global label in hp41gfx.focal replaces that function's FAT
+; entry, so the FAT order and XROM numbers stay those of the FOCAL source.
+;
+; Each function sends the same bytes as its FOCAL version: the mnemonic, then
+; the arguments formatted by the mainframe's ARCL routine AFORMT in FIX 4 with
+; flag 29 set (FIX 0, flag 29 clear for colours and screens), then calls the
+; HP-IL module's OUTA. Unlike the FOCAL version it puts the user's display
+; format back before sending. ALPHA is overwritten, the stack is unchanged.
+;
+; Fixed addresses used (checked against HP's listings and the CS1H ROM):
+;   [APNDNW] 2D14  append the character in G to ALPHA (mainframe)
+;   [AFORMT] 0628  append the number in B to ALPHA, as ARCL does (mainframe)
+;   7246           OUTA in the HP-IL module, page 7 (82160A, ROM CS1H)
+; Return stack: AFORMT is called from the function's own level, as ARCL
+; does, because it needs two more levels.
+;
+; Descriptor in B on entry to (CMD4) or (CMD0):
+;   C[2:0] first mnemonic character, C[5:3] second character or 0,
+;   C[8:6] number of arguments (0, 1 = X, 2 = Y then X).
+
+(CMD4)  C=0     X               ; descriptor in B: survives APNDNW and NCGOREL
+        RAMSLCT                 ; chip 0
+        C=REGN  14              ; flags register
+        N=C                     ; keep the user's flags
+        RCR     6               ; C[1:0] = flags 24..31
+        ST=C
+        SF      2               ; flag 29: digit grouping, as the FOCAL code
+        C=ST
+        RCR     10              ; C[1:0] = flags 40..47
+        ST=C
+        SF      7               ; flag 40 set and
+        CF      6               ; flag 41 clear: FIX
+        C=ST
+        PT=     2
+        LC      4               ; flags 36..39 = 4 digits
+        JNC     (CMDF)
+
+(CMD0)  C=0     X
+        RAMSLCT
+        C=REGN  14
+        N=C
+        RCR     6
+        ST=C
+        CF      2               ; flag 29 clear: no grouping in integers
+        C=ST
+        RCR     10
+        ST=C
+        SF      7
+        CF      6
+        C=ST
+        PT=     2
+        LC      0               ; FIX 0
+
+(CMDF)  RCR     12              ; back to normal position
+        REGN=C  14
+        C=0     ALL             ; clear ALPHA
+        REGN=C  5
+        REGN=C  6
+        REGN=C  7
+        REGN=C  8
+        C=B     ALL             ; first character
+        PT=     0
+        G=C
+        NCXQ    [APNDNW]
+        C=B     ALL
+        RCR     3
+        ?C#0    X               ; second character?
+        JNC     (NOC2)
+        PT=     0
+        G=C
+        NCXQ    [APNDNW]
+(NOC2)  C=B     ALL
+        RCR     6
+        ?C#0    X               ; any arguments?
+        JNC     (DONE)
+        LDI     020             ; space
+        PT=     0
+        G=C
+        NCXQ    [APNDNW]
+        C=B     ALL
+        RCR     6
+        C=C-1   X
+        ?C#0    X               ; two arguments?
+        JNC     (ARGX)
+        C=REGN  2               ; Y
+        B=C     ALL
+        PT=P                    ; AFORMT leaves Q active, FORMAT needs P
+        NCXQ    [AFORMT]
+        LDI     020
+        PT=     0
+        G=C
+        NCXQ    [APNDNW]
+(ARGX)  C=REGN  3               ; X
+        B=C     ALL
+        PT=P                    ; AFORMT leaves Q active, FORMAT needs P
+        NCXQ    [AFORMT]
+(DONE)  C=N                     ; the user's flags back
+        REGN=C  14
+        NCGO    7246            ; OUTA: send ALPHA, returns to the mainframe
+
+; Entries: C=0, argument count, second character, first character, B=C.
+
+        .NAME   "GCLEAR"
+(GCLEAR) C=0    ALL
+        LDI     001
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     043             ; C
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD0)
+
+        .NAME   "GCOLOR"
+(GCOLOR) C=0    ALL
+        LDI     001
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     04B             ; K
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD0)
+
+        .NAME   "GTARG"
+(GTARG) C=0     ALL
+        LDI     001
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     054             ; T
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD0)
+
+        .NAME   "GSHOW"
+(GSHOW) C=0     ALL
+        LDI     001
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     053             ; S
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD0)
+
+        .NAME   "GMOVE"
+(GMOVE) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     04D             ; M
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GDRAW"
+(GDRAW) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     044             ; D
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GPLOT"
+(GPLOT) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     050             ; P
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GPIXEL"
+(GPIXEL) C=0    ALL
+        LDI     000
+        RCR     11
+        LDI     050             ; P
+        RCR     11
+        LDI     053             ; S
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GBOX"
+(GBOX)  C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     042             ; B
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GFBOX"
+(GFBOX) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     046             ; F
+        RCR     11
+        LDI     042             ; B
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GCIRC"
+(GCIRC) C=0     ALL
+        LDI     001
+        RCR     11
+        LDI     000
+        RCR     11
+        LDI     04F             ; O
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GFCIRC"
+(GFCIRC) C=0    ALL
+        LDI     001
+        RCR     11
+        LDI     046             ; F
+        RCR     11
+        LDI     04F             ; O
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GNEXT"
+(GNEXT) C=0     ALL
+        LDI     000
+        RCR     11
+        LDI     04E             ; N
+        RCR     11
+        LDI     053             ; S
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GAXES"
+(GAXES) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     058             ; X
+        RCR     11
+        LDI     041             ; A
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GGRID"
+(GGRID) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     052             ; R
+        RCR     11
+        LDI     047             ; G
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GVERT"
+(GVERT) C=0     ALL
+        LDI     002
+        RCR     11
+        LDI     056             ; V
+        RCR     11
+        LDI     050             ; P
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GPFILL"
+(GPFILL) C=0    ALL
+        LDI     000
+        RCR     11
+        LDI     046             ; F
+        RCR     11
+        LDI     050             ; P
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)
+
+        .NAME   "GPOLY"
+(GPOLY) C=0     ALL
+        LDI     000
+        RCR     11
+        LDI     04F             ; O
+        RCR     11
+        LDI     050             ; P
+        B=C     ALL             ; NCGOREL uses C
+        NCGOREL (CMD4)

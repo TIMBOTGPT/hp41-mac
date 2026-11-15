@@ -30,8 +30,57 @@ extracted correctly.)
 Build by hand:
 
     python3 tools/build_xrom.py xrom/src/hp41gfx.focal xrom/build/HP41GFX.MOD \
-      --xrom 8 --header "-HP41GFX 0A" --title "HP41GFX graphics v0" \
-      --listing xrom/build/hp41gfx.lst
+      --xrom 8 --header "-HP41GFX 0A" --romid GF-0A --title "HP41GFX graphics v0" \
+      --mcode xrom/src/hp41gfx_mc.src --listing xrom/build/hp41gfx.lst
+
+Without `--mcode` the ROM is FOCAL only (`MCODE= tests/xrom.sh` tests that
+build).
+
+## Microcode functions
+
+Added 15 November 2026. `xrom/src/hp41gfx_mc.src` (asmnut, Zencode
+mnemonics) replaces 18 functions with microcode: GCLEAR GCOLOR GTARG GSHOW
+GMOVE GDRAW GPLOT GPIXEL GBOX GFBOX GCIRC GFCIRC GNEXT GAXES GGRID GVERT
+GPFILL GPOLY. A label `(NAME)` in that file for a global label `NAME` of the
+FOCAL source makes the FAT entry point to the microcode, in the same FAT
+position, so XROM numbers do not change. The FOCAL versions stay in the ROM
+(COPY still copies them).
+
+How they work: the entry puts the mnemonic and the argument count in B and
+jumps to a shared body, which
+
+1. saves the flags register (register 14) in N and sets FIX 4 and flag 29
+   (FIX 0, flag 29 clear for colours and screens),
+2. clears ALPHA and appends the mnemonic with the mainframe's `APNDNW`,
+3. appends Y and X with `AFORMT`, the routine `ARCL` uses,
+4. puts the user's flags back,
+5. jumps to `OUTA` in the HP-IL module (7246).
+
+The bytes sent are the FOCAL version's, byte for byte (the golden tests pass
+unchanged). Differences for the user: the display format is restored, and in
+PRGM mode a step shows `20 GDRAW` rather than `XROM "GDRAW"`.
+
+Fixed addresses, checked against HP's VASM listings (mainframe and HP-IL
+cassette/control ROM, revision 6/81A) and against the `CS1H` HP-IL ROM image
+word for word: `APNDNW` 2D14, `AFORMT` 0628, `OUTA` 7246. Other HP-IL module
+revisions are not checked.
+
+Points that cost time:
+
+- `NCGOREL` (and `NCXQREL`) go through the mainframe's `GOLONG`/`GOSUB`
+  routines, which use C. Anything to keep across them goes in B.
+- `AFORMT` leaves the Q pointer active. `FORMAT` needs P: `PT=P` before
+  each call, or the second number gets digit-grouping commas in the wrong
+  places.
+- `AFORMT` needs two more return-stack levels, so it is called from the
+  function's own level, as `ARCL` does, never from a subroutine.
+
+Speed at stock speed, 20 `GDRAW` steps in a row (`tools/xrom_callrate.sh`):
+0.56 s per call FOCAL, 0.39 s microcode, 0.17 s for an `OUTA` step alone.
+The sine program of `tests/xrom.sh` goes from 1.41 to 1.24 s per point.
+Where the 2,069 instructions of one microcode call go: HP-IL module 530,
+mainframe byte fetch for `OUTA` 249, number formatting about 500, appending
+to ALPHA 360, step and XROM dispatch about 300, our own code 58.
 
 ## User code in ROM
 
@@ -115,10 +164,11 @@ FIX 0 with flag 29 clear.
 
 Differences from what was agreed:
 
-- The functions do not restore the user's display format. They leave FIX 4
-  with flag 29 set (the HP-41 default). User code cannot save and restore
-  the format without disturbing the stack or synthetic tricks. The
-  microcode version should restore it.
+- The 18 microcode functions restore the user's display format. The ten
+  still in FOCAL (GRAPH GSCALE PSET PGET GTEXT GPAL GIMAGE GSPRAY GSAVE
+  GLOAD) do not: they leave FIX 4 with flag 29 set (the HP-41 default).
+  User code cannot save and restore the format without disturbing the
+  stack or synthetic tricks.
 - `GTARGET` became `GTARG`: `focalcod` rejects seven-character labels.
 
 ## Observed

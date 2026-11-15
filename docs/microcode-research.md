@@ -1,92 +1,92 @@
 # Microcode XROM: research notes
 
-Status 15 November 2026: research only, nothing implemented. Question: is a
-microcode (MCODE) version of HP41GFX worth building, and how.
+Status 15 November 2026. Question: is a microcode (MCODE) version of
+HP41GFX worth building, and how. First result: 18 drawing functions are now
+microcode (`docs/xrom.md`, "Microcode functions").
 
-## Where the time goes now (measured)
+## Sources found
 
-From `tests/xrom.sh` (the sine program, stock speed, emulated time in the
-frame log):
+On the NAS (`12_Hobbies/HP DVDs and Docs`), local reads only, nothing
+committed:
 
-| Step | Time per call |
+- `HP Stuff/Internal Documentation/82161A HPIL Cassette-Control VASM
+  Listing.txt`: HP's source of the HP-IL module's control ROM (page 7,
+  `-MASS ST 1H`, revision 6/81A), including `OUTA`, `SDATA`, `RDDFRM`,
+  `UNL`, `LISTEN`.
+- `82162A HPIL Printer VASM Listing.txt`: the module's page 6.
+- `Coconut VASM GFF.txt`: the HP-41C mainframe (`AFORMT`, `FORMAT`,
+  `APNDNW`).
+- `HPIL Reference Specification.pdf` (1980, scanned, OCR with tesseract):
+  accessory ID classes, appendix D.
+- `HP41-DVD/Modules-ROMs/DISASM 4D/41CRAM/HPIL.pdf`: chip registers and a
+  short entry point table.
+
+The page 7 listing matches the `CS1H` ROM image used here word for word at
+`SDATA0` 7126, `SDATA` 7128, `RDDFRM` 7110, `UNL` 70AF, `LISTEN` 70DD; the
+GOSUB targets the listing leaves to the linker resolve to the listed
+routines (for example `SCHDEV` calls `PILEN` at 7063).
+
+## HP-IL module routines a microcode sender can call
+
+- `SDATA0` 7126: enable the flag line, then `SDATA`.
+- `SDATA` 7128: send C[1:0] as a data frame, wait for ORAV (timeout about
+  40 s), S9 set on timeout or frame not as sent.
+- `LISTEN` 70DD: address the selected device as listener.
+- `SCHDEV` 72DD: enable the chip, check errors, get the device number.
+- `UNLCHK` 7336: send UNL, then report any error.
+- `OUTA` 7246: all of the above for ALPHA, adding CR LF unless flag 17.
+
+From the chip documents: in the active controller the chip sends RFC by
+itself when a command returns without error, and sets ORAV only when the
+RFC has come back. A sender does not source RFC.
+
+## Measured (stock speed, emulated)
+
+`tools/xrom_callrate.sh`, 20 `GDRAW` steps in a row:
+
+| ROM | per call |
 | --- | --- |
-| `GMOVE`/`GDRAW` user code before `OUTA` (FIX 4, two `ARCL`, building ALPHA) | about 0.55 s |
-| `OUTA` on the loop (addressing, 18 data bytes, `UNL`) | about 0.17 s |
-| the user's own loop step with `SIN` | about 0.6 s |
-| total per sine point | about 1.4 s |
+| FOCAL only | 0.56 s |
+| microcode (AFORMT into ALPHA, then OUTA) | 0.39 s |
+| an `OUTA` step alone (ALPHA already set) | 0.17 s |
 
-So on a stock HP-41 the FOCAL code inside the XROM costs three times as much
-as the HP-IL transfer. Bytes on the loop are not the bottleneck for drawing
-commands. They are for bulk (`OUTXB` 2.6 B/s, see
-`graphics-protocol.md`).
+Sine program of `tests/xrom.sh`: 1.41 s per point FOCAL, 1.24 s microcode.
 
-## What the HP-IL chip needs (from the 1LB6 docs and an `OUTA` trace)
+Instructions in one microcode `GDRAW` (2,069): HP-IL module 530, mainframe
+byte fetch for `OUTA` 249, number formatting about 500, appending to ALPHA
+360, step and XROM dispatch about 300, own code 58.
 
-Observed in the trace of `OUTA` (HP-IL module code driving the chip):
+My earlier estimate (0.1 to 0.2 s per call) was wrong. It assumed the
+FOCAL interpreter was most of the cost. Without it, HP's own routines
+remain: appending characters to ALPHA shifts four registers per character,
+and `OUTA` fetches each byte back out of ALPHA through the mainframe, about
+30 instructions (5 ms) per byte. The earlier breakdown (0.55 s of FOCAL
+before each `OUTA`) also counted the user's own program steps between calls.
 
-- `SELPF 0`, `CH= D0`: write R0 (controller active, talker).
-- `SELPF 1`, `CH= 81` (CMD) or `A1` (RDY), then `HPIL=C 2`: frame class in
-  R1W, data byte in R2.
-- wait on `?F10` (ORAV), then check `?F9` (FRNS, frame not as sent).
-- `RDPTRN 1` reads the received control bits.
+## What would make it faster, ranked
 
-From the chip documentation (OCR of the integrated circuit description):
+1. **Bulk sender (recommended next, about 60%).** Address once, then
+   `SDATA` per byte from data registers or an extended memory file. The
+   per-byte cost drops to roughly 10 to 15 instructions (2 to 3 ms, about
+   300 to 500 B/s at stock speed, estimate) against 2.6 B/s for `OUTXB`
+   now. This is the largest gap left on a stock HP-41.
+2. **Send without ALPHA (about 30%).** Format with `FORMAT` (display
+   registers) or straight from the BCD digits, and send each byte with
+   `SDATA`. Saves the ALPHA shuffling and the byte fetch, roughly 600 to
+   800 of the 2,069 instructions: about 0.25 s per call instead of 0.39 s
+   (estimate). Exact bytes would have to be rebuilt by hand (rounding, digit
+   grouping), so the golden tests would need care.
+3. **Binary drawing commands (about 10%).** Coordinates as 2-byte integers
+   (layer 2), about 6 bytes per `D` instead of 18. Needs protocol additions
+   and is mostly worth it on fast machines, where formatting is cheap anyway.
 
-- In the active controller the chip sends RFC by itself when a command
-  returns without error, and sets ORAV only when that RFC has come back.
-  A microcode sender does not source RFC.
-- ORAV is the "next frame may be sent" signal for both talker and
-  controller.
+On a fast emulated or FPGA HP-41 all of this scales with CPU speed, so the
+stock machine is the only case where these matter.
 
-Not available: the HP-IL module's own listing. It may be on the NAS
-(not mounted this session) or on hp41.org. Without it the module's entry
-points, its RAM use and its error paths are unverified.
+## Risks still open
 
-## Expected gain (estimates, not measured)
-
-- Formatting two numbers in microcode and writing frames directly: tens of
-  ms instead of 0.55 s. Moderate confidence.
-- Sending coordinates as layer 2 binary (2 bytes each) instead of text:
-  `D` drops from 17 bytes to about 6. Moderate confidence.
-- Per drawing call: about 0.7 s down to roughly 0.1 to 0.2 s.
-- Per sine point: about 1.4 s down to roughly 0.8 s, because the user's own
-  FOCAL math stays. A plot program gets about 2x, not 5x.
-- Bulk: a microcode loop that addresses once and streams should reach the
-  chip and loop limit (hundreds of B/s or more on a stock machine; unknown
-  until measured on hardware), against 2.6 B/s now.
-- On a fast emulated or FPGA HP-41 the FOCAL overhead shrinks with CPU speed,
-  so microcode matters mainly for stock hardware and for bulk.
-
-## Options, ranked
-
-1. **Microcode drives the chip directly (recommended, about 60%).** Keep
-   `GRAPH` in user code (FINDID, SELECT, which leave the device addressed),
-   add two microcode functions: one that formats and sends a command line
-   from the stack, one that streams a block from data registers. Every other
-   drawing function calls the first. Verifiable now in the emulator, with the
-   frame pattern already traced. Against: it duplicates the module's error
-   handling (retransmit, frame errors, IFC, timeouts), and a bug can hang the
-   loop on real hardware where the emulator would not.
-2. **Microcode calls the HP-IL module's internal routines (about 30%).** Uses
-   tested code with the module's own error handling. Needs the listing and
-   ties the XROM to one module ROM revision. Becomes first choice if the
-   listing turns up and the module has only one revision in the field.
-3. **Stay in user code and add composite commands (about 10%).** For example
-   a polyline from data registers. The per-point FOCAL formatting stays, so
-   the gain is small. Worth doing only as protocol commands that a microcode
-   version would also use.
-
-## What would change the ranking
-
-- The HP-IL module listing found: option 2 moves up.
-- Real-hardware access to test against: lowers the risk in option 1.
-- If stock-machine speed matters less than the fast-machine end state,
-  microcode can wait and the protocol work comes first.
-
-## Before implementing
-
-- Mount the NAS and look for the HP-IL module listing or entry point table.
-- Confirm in the emulator that a microcode function can send one frame and
-  see ORAV, using the traced register pattern.
-- Decide how a microcode function reports a loop error (HP-41 error message
-  versus the `?E` status).
+- Only the `CS1H` HP-IL ROM is checked. Other revisions may move routines.
+- Real hardware is untested: a bug in a sender can hang a real loop where
+  the emulator recovers.
+- Loop errors are reported as the HP-IL module reports them (`TRANSMIT ERR`
+  and so on), because the module's own routines are used.

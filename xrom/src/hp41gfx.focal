@@ -1,7 +1,9 @@
 ; HP41GFX user-code XROM, v0 (protocol v0, docs/graphics-protocol.md).
 ; The FAT follows the order of the global labels below. Add new functions at
-; the end only: reordering renumbers XROM 17,nn and breaks keyed programs.
-; Assembled by tools/build_xrom.py with focalcod and asmnut.
+; the end only: reordering renumbers XROM 8,nn and breaks keyed programs.
+; Assembled by tools/build_xrom.py with focalcod and asmnut. In the default
+; build 18 of these functions are replaced in the FAT by the microcode
+; versions in hp41gfx_mc.src, which send the same bytes.
 ;
 ; Arguments follow keying order: x ENTER y GDRAW puts x in Y and y in X.
 ; Every function except GRAPH expects GRAPH to have selected the peripheral.

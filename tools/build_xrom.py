@@ -34,6 +34,8 @@ ap.add_argument("--version", default="")
 ap.add_argument("--romid", default="", help="ROM identifier, asmnut form xy-zt, e.g. GF-0A")
 ap.add_argument("--xrm", action="append", default=["ILMODULE-1H.XRM", "XFUNS3-2D.XRM"])
 ap.add_argument("--listing")
+ap.add_argument("--mcode", help="asmnut source appended after the user code; a label (NAME) "
+                "for a FOCAL global label NAME makes that FAT entry point to the microcode")
 a = ap.parse_args()
 
 cmd = [FOCALCOD, "-E", "-P", XROMDB]
@@ -127,9 +129,18 @@ for ch in chunks:
     ranges.append((pos + 2, pos + 2 + nb)); pos += 2 + nb
 njumps = compile_jumps(words, ranges)
 
+mlines, mnames = [], set()
+if a.mcode:
+    mlines = open(a.mcode).read().splitlines()
+    for l in mlines:
+        m = re.match(r"^\((\w+)\)", l.split(";")[0])
+        if m: mnames.add(m.group(1))
+mfuncs = [n for n, _ in labels if n in mnames]
+
 nf = 1 + len(labels)
 src = [".ZENCODE", ".XROM %d" % a.xrom, ".FCNS %d" % nf, ".ORG 002", ".DEFR4K (HEADER)"]
-src += [".U4KDEF (U%02d)" % i for i in range(len(labels))]
+src += [(".DEFR4K (%s)" % n) if n in mnames else (".U4KDEF (U%02d)" % i)
+        for i, (n, _) in enumerate(labels)]
 src += ["#000", "#000", '.NAME "%s"' % a.header, "(HEADER) RTN", ".UCODE"]
 label_at = {pos: i for i, (_, pos) in enumerate(labels)}
 for i, w in enumerate(words):
@@ -137,6 +148,7 @@ for i, w in enumerate(words):
         src.append("(U%02d)" % label_at[i])      # own line: asmnut drops a word after a label in .UCODE
     src.append("#%03X" % w)
 src += [".MCODE"]
+src += mlines
 if a.romid: src.append(".ROMID %s" % a.romid)
 src += [".END"]
 
@@ -162,3 +174,5 @@ if a.listing:
     open(a.listing, "w").write("\n".join(out) + "\n")
 print("%s: XROM %d, %d functions (%s), %d user-code words in %d chunk(s), %d jumps compiled" %
       (a.out, a.xrom, nf, " ".join(n for n, _ in labels), len(words), len(chunks), njumps))
+if a.mcode:
+    print("microcode: %d functions (%s)" % (len(mfuncs), " ".join(mfuncs)))

@@ -20,8 +20,11 @@ bad()  { echo "FAIL  $1"; fail=1; }
 X="XEQ ALPHA"
 XR="$TMP/HP41GFX.MOD"
 
+# MCODE= (empty) builds the FOCAL-only ROM, for comparison
+MC="${MCODE-$R/xrom/src/hp41gfx_mc.src}"
 python3 "$R/tools/build_xrom.py" "$R/xrom/src/hp41gfx.focal" "$XR" --xrom 8 --header "-HP41GFX 0A" --romid GF-0A \
-  --title "HP41GFX graphics v0" > "$TMP/build.out" 2>&1 && pass "XROM built: $(sed 's/.*: //' "$TMP/build.out")" || { bad "XROM build"; cat "$TMP/build.out"; exit 1; }
+  --title "HP41GFX graphics v0" ${MC:+--mcode "$MC"} > "$TMP/build.out" 2>&1 && pass "XROM built: $(sed -n '1s/.*: //p' "$TMP/build.out")" || { bad "XROM build"; cat "$TMP/build.out"; exit 1; }
+[ -n "$MC" ] && pass "$(sed -n '2p' "$TMP/build.out")"
 "$B/hp41-headless" --modinfo "$XR" > "$TMP/modinfo"
 names=$(grep -E '^08,([0-9][0-9]) ' "$TMP/modinfo" | grep -v '^08,00' | awk '{print $3}' | tr '\n' ' ')
 [ "$names" = "GRAPH GCLEAR GCOLOR GTARG GSHOW GMOVE GDRAW GPLOT GSCALE GPIXEL PSET PGET GBOX GFBOX GCIRC GFCIRC GTEXT GPAL GNEXT GIMAGE GSPRAY GSAVE GLOAD GAXES GGRID GVERT GPFILL GPOLY " ] && pass "FAT: $names" || bad "FAT names [$names]"
@@ -64,8 +67,24 @@ want=$(sed -n 's/^!hash 0 //p' "$HERE/gfx/sine.gfx"); got=$(sed -n 's/.*screen 0
 [ "$got" = "$want" ] && pass "rendered screen matches the golden hash $want" || bad "screen hash $got, golden $want"
 grep -q -- '-> [A-Z]' "$TMP/sine.gfxlog" && bad "protocol errors: $(grep -- '-> [A-Z]' "$TMP/sine.gfxlog" | head -3)" || pass "no protocol errors"
 grep -q 'NONEXISTENT\|NO HP41GFX\|TRANSMIT ERR\|DATA ERROR' "$TMP/sine.calc" && bad "calculator showed an error" || pass "no calculator error shown"
-grep -q 'XROMG.GDRAW' "$TMP/sine.calc" && pass "program steps are XROM calls (PRGM mode shows XROM \"GDRAW\")" || bad "program steps are not XROM calls"
+# a user-code ROM function shows as XROM "GDRAW", a microcode one by its name alone
+if [ -n "$MC" ]; then
+  grep -q -- '^key ALPHA  -> \[[0-9]* GDRAW  ' "$TMP/sine.calc" \
+    && pass "program steps are microcode XROM calls (PRGM mode shows \"20 GDRAW\")" || bad "program steps are not XROM calls"
+else
+  grep -q 'XROMG.GDRAW' "$TMP/sine.calc" && pass "program steps are XROM calls (PRGM mode shows XROM \"GDRAW\")" || bad "program steps are not XROM calls"
+fi
 echo "      HP-41 emulated time $(sed -n 's/^emulated time: //p' "$TMP/sine.calc")"
+
+# microcode functions send in FIX 4 with grouping, then restore the user's FIX 2 and flag 29
+if [ -n "$MC" ]; then
+  session fmt "ON $X G R A P H ALPHA $X F I X ALPHA 2 $X C F ALPHA 2 9 2 ENTER 1 0 0 0 $X G D R A W ALPHA"
+  line=$(sed -n 's/^ *[0-9.]* line \[\(D .*\)\] -> .*/\1/p' "$TMP/fmt.gfxlog")
+  got=$(final "$TMP/fmt.calc")
+  [ "$line" = "D 2.0000 1,000.0000" ] && [ "$got" = " 1000.00" ] \
+    && pass "user format kept: sent [$line], X shows [$got] in FIX 2 without grouping" \
+    || bad "format: sent [$line], display [$got]"
+fi
 
 # the functions added after v0: box, circle, text, palette, image, spray, next screen
 F() { echo "$X $1 ALPHA"; }

@@ -62,10 +62,10 @@ build/hp41-gfx: src/gfx/gfx.c src/gfx/gfx.h src/gfx/session.c src/gfx/session.h 
 
 # user-code XROM (needs the focalcod/asmnut toolchain, docs/xrom.md)
 xrom: xrom/build/HP41GFX.MOD
-xrom/build/HP41GFX.MOD: xrom/src/hp41gfx.focal tools/build_xrom.py
+xrom/build/HP41GFX.MOD: xrom/src/hp41gfx.focal xrom/src/hp41gfx_mc.src tools/build_xrom.py
 	mkdir -p xrom/build
 	python3 tools/build_xrom.py xrom/src/hp41gfx.focal $@ --xrom 8 --header "-HP41GFX 0A" --romid GF-0A \
-	  --title "HP41GFX graphics v0" --listing xrom/build/hp41gfx.lst
+	  --title "HP41GFX graphics v0" --mcode xrom/src/hp41gfx_mc.src --listing xrom/build/hp41gfx.lst
 
 clean:
 	rm -rf build

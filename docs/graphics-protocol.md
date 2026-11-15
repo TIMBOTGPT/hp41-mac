@@ -24,8 +24,8 @@ real loop caps at about 7.1 kB/s with one device (HP Journal, 1983).
 - Ordinary HP-IL device-dependent data. The calculator makes the peripheral
   listener and sends data frames (as `OUTA` does), or makes it talker and
   reads (as `INA` does). No custom HP-IL frames.
-- Device ID `HP41GFX` (seven characters, so `FINDID` works). Accessory ID to
-  be chosen; 66 is a placeholder.
+- Device ID `HP41GFX` (seven characters, so `FINDID` works). Accessory ID 66
+  (class 6, graphic i/o; see decision 5).
 - Errors also set the HP-IL status byte (SST), so a calculator can poll
   without reading text.
 
@@ -153,10 +153,17 @@ that addresses once and streams the block.
 2. Commands are silent on success. Errors set the HP-IL status byte and are
    read with `?E`.
 3. Pixel origin is top left, x right, y down. `SC` user units are y up.
-4. The XROM sets FIX and flag 29 itself before `ARCL`. It was to restore
-   them afterwards; the user-code XROM does not (see `docs/xrom.md`).
-5. Accessory ID: still open, until the HP-IL accessory class table has
-   been checked. 66 is a placeholder.
+4. The XROM sets FIX and flag 29 itself before `ARCL`, and restores them
+   afterwards. Done in the 18 microcode functions; the ten still in FOCAL
+   do not restore them (see `docs/xrom.md`).
+5. Accessory ID 66, checked 15 November 2026 against the HP-IL reference
+   specification (1980 DEC 1, appendix D): class 0110 is "graphic i/o", no
+   devices defined in it then. The status byte follows the same appendix:
+   D8 clear means the other bits are designer specified, D7 is reserved for
+   "needs service"; our error numbers 1 to 14 fit below D7. The 1981 HP-IL
+   module listing has its own device type table (plotter 50), used only by
+   the module's printer search, not the accessory ID. HP's 7470A plotter
+   answers 60 in pyILPER. Whether a later HP device used 66 is not checked.
 
 Details fixed while implementing:
 

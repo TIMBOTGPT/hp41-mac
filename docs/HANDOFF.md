@@ -121,13 +121,14 @@ Not done or not verified:
 
 ## Next steps, in order
 
-1. Microcode XROM functions: a block sender (address once, stream bytes
-   from registers or extended memory, the per-byte cost of the HP-IL ROM
-   loop, expected about 150 to 200 bytes/s at stock speed) and display
-   format save/restore. Research done (`docs/microcode-research.md`): the
-   XROM's FOCAL formatting (0.55 s per call) costs more than the transfer
-   (0.17 s); recommended route is microcode driving the chip directly,
-   unless the HP-IL module listing turns up. Smaller: asset memory compaction on free, saving the asset
+1. Microcode XROM: 18 drawing functions done (15 Nov 2026,
+   `xrom/src/hp41gfx_mc.src`, `docs/xrom.md`): same bytes, user's display
+   format restored, 0.56 to 0.39 s per call. HP's VASM listings of the
+   HP-IL module and the mainframe are on the NAS
+   (`docs/microcode-research.md`). Next, ranked there: a block sender
+   (address once, `SDATA` per byte from registers or extended memory,
+   estimate 300 to 500 bytes/s at stock speed against 2.6 now), then
+   sending without ALPHA. Smaller: asset memory compaction on free, saving the asset
    store, palette import with images, dithering option. The first XROM is FOCAL calling `OUTA`/`INA`
    (and `FINDID` to locate the peripheral). Evaluate NutStudio
    (`~/Downloads/HP41-R3/Utilities/NutStudio`, runs on macOS) before SDK41
